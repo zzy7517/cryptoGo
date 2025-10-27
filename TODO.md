@@ -122,41 +122,41 @@ cryptoGo/
 - [x] 创建 `backend/app/core/config.py`（环境变量）
 - [x] 创建 Pydantic schemas（KlineResponse, TickerResponse）
 
-### Phase 3: 前端K线图 🔥
+### Phase 3: 前端K线图 ✅
 
 **3.1 环境配置**
-- [ ] 创建 `frontend/.env.local`
+- [x] 创建 `frontend/.env.local`
   ```bash
   NEXT_PUBLIC_API_URL=http://localhost:8000
   NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws
   ```
 
 **3.2 K线图组件**
-- [ ] 创建 `CandlestickChart.tsx`（Lightweight Charts）
-- [ ] 蜡烛图 + 成交量柱状图
-- [ ] 实时K线更新（支持追加数据）
-- [ ] 当前价格线（十字线）
-- [ ] 缩放、拖拽、响应式
+- [x] 创建 `CandlestickChart.tsx`（Lightweight Charts）
+- [x] 蜡烛图 + 成交量柱状图
+- [x] 实时K线更新（支持追加数据）
+- [x] 当前价格线（十字线）
+- [x] 缩放、拖拽、响应式
 
 **3.3 状态管理**
-- [ ] Market Store（Zustand）：klineData, currentSymbol, currentInterval
-- [ ] React Query：自动刷新、错误处理
+- [x] Market Store（Zustand）：klineData, currentSymbol, currentInterval
+- [x] React Query：自动刷新、错误处理
 
 **3.4 交易页面**
-- [ ] 创建 `frontend/src/app/trading/page.tsx`
-- [ ] 交易对选择 + 时间周期切换
-- [ ] 实时K线图展示
-- [ ] 实时价格显示（大字体，醒目）
-- [ ] 24h涨跌幅（百分比 + 绝对值）
-- [ ] 实时成交量
-- [ ] 最高价/最低价（24h）
+- [x] 创建 `frontend/src/app/trading/page.tsx`
+- [x] 交易对选择 + 时间周期切换
+- [x] 实时K线图展示
+- [x] 实时价格显示（大字体，醒目）
+- [x] 24h涨跌幅（百分比 + 绝对值）
+- [x] 实时成交量
+- [x] 最高价/最低价（24h）
 
-**3.5 实时数据更新** 🔥
-- [ ] 定时轮询（30秒或更短）更新K线数据
-- [ ] 实时追加最新K线（不刷新整个图表）
-- [ ] 当前价格线实时移动
-- [ ] 价格闪烁动画（涨绿跌红）
-- [ ] 最新成交量实时更新
+**3.5 实时数据更新** ✅
+- [x] 定时轮询（30秒）更新K线数据
+- [x] 实时追加最新K线（不刷新整个图表）
+- [x] 当前价格线实时移动
+- [x] 价格闪烁动画（涨绿跌红）
+- [x] 最新成交量实时更新
 - [ ] WebSocket推送（可选，后续优化）
 
 ### Phase 4: Docker环境（可选）
