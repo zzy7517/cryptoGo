@@ -21,7 +21,7 @@ export default function Home() {
             进入交易终端
           </Link>
           <a
-            href="http://localhost:8000/docs"
+            href="http://localhost:9527/docs"
             target="_blank"
             rel="noopener noreferrer"
             className="px-8 py-3 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-semibold transition-colors"

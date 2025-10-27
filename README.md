@@ -58,10 +58,10 @@ cp .env.example .env
 
 4. 运行后端服务：
 ```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 9527
 ```
 
-访问 API 文档：http://localhost:8000/docs
+访问 API 文档：http://localhost:9527/docs
 
 ### 前端设置
 

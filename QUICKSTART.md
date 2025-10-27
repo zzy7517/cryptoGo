@@ -7,7 +7,7 @@
 ```bash
 cd backend
 source venv/bin/activate
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 9527
 ```
 
 ### 2. 启动前端服务
@@ -23,7 +23,7 @@ npm run dev
 
 - **主页**: http://localhost:3000
 - **交易终端**: http://localhost:3000/trading
-- **API 文档**: http://localhost:8000/docs
+- **API 文档**: http://localhost:9527/docs
 
 ---
 

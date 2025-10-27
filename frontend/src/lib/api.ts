@@ -10,7 +10,7 @@ import type {
   TimeInterval,
 } from '@/types/market';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9527';
 
 const apiClient = axios.create({
   baseURL: API_URL,

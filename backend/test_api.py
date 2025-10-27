@@ -5,7 +5,7 @@ API 测试脚本
 import requests
 import json
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:9527"
 
 
 def print_json(data, title=""):

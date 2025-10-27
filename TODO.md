@@ -127,8 +127,8 @@ cryptoGo/
 **3.1 环境配置**
 - [x] 创建 `frontend/.env.local`
   ```bash
-  NEXT_PUBLIC_API_URL=http://localhost:8000
-  NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws
+  NEXT_PUBLIC_API_URL=http://localhost:9527
+  NEXT_PUBLIC_WS_URL=ws://localhost:9527/ws
   ```
 
 **3.2 K线图组件**
