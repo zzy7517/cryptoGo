@@ -1,10 +1,39 @@
 'use client';
 
 /**
- * K线图组件 - 使用 Lightweight Charts
+ * K线图组件 (Candlestick Chart Component)
+ * 
+ * 文件作用：
+ * - 渲染专业级加密货币K线图表
+ * - 使用 TradingView 的 Lightweight Charts 库
+ * 
+ * 主要功能：
+ * 1. 蜡烛图展示 - 显示开盘价、最高价、最低价、收盘价
+ * 2. 成交量柱状图 - 独立缩放的成交量展示
+ * 3. 实时数据更新 - 根据 props 变化自动更新图表
+ * 4. 响应式设计 - 监听窗口大小变化，自动调整图表尺寸
+ * 5. 交互功能 - 十字准线、缩放、拖动
+ * 
+ * Props：
+ * - data: KlineData[] - K线数据数组
+ * - symbol: string - 交易对符号（用于显示标题）
+ * 
+ * 技术实现：
+ * - 使用 useRef 管理图表实例，避免重复创建
+ * - 使用 useEffect 处理图表初始化和清理
+ * - 数据格式转换：将时间戳转换为秒级，适配图表库
+ * - 成交量颜色：涨绿（#26a69a）跌红（#ef5350）
+ * 
+ * 样式配置：
+ * - 暗色主题 (#1a1a1a 背景)
+ * - 自定义网格线颜色
+ * - 时间轴显示时间但不显示秒
+ * 
+ * 使用示例：
+ * <CandlestickChart data={klineData} symbol="BTC/USDT" />
  */
 import React, { useEffect, useRef } from 'react';
-import { createChart, IChartApi, ISeriesApi, CandlestickData, HistogramData } from 'lightweight-charts';
+import { createChart, ColorType, CandlestickSeries, HistogramSeries } from 'lightweight-charts';
 import type { KlineData } from '@/types/market';
 
 interface CandlestickChartProps {
@@ -14,9 +43,9 @@ interface CandlestickChartProps {
 
 export default function CandlestickChart({ data, symbol }: CandlestickChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
-  const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  const chartRef = useRef<any>(null);
+  const candlestickSeriesRef = useRef<any>(null);
+  const volumeSeriesRef = useRef<any>(null);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -26,7 +55,7 @@ export default function CandlestickChart({ data, symbol }: CandlestickChartProps
       width: chartContainerRef.current.clientWidth,
       height: 500,
       layout: {
-        background: { color: '#1a1a1a' },
+        background: { type: ColorType.Solid, color: '#1a1a1a' },
         textColor: '#d1d4dc',
       },
       grid: {
@@ -49,7 +78,7 @@ export default function CandlestickChart({ data, symbol }: CandlestickChartProps
     chartRef.current = chart;
 
     // 创建蜡烛图序列
-    const candlestickSeries = chart.addCandlestickSeries({
+    const candlestickSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#26a69a',
       downColor: '#ef5350',
       borderVisible: false,
@@ -60,7 +89,7 @@ export default function CandlestickChart({ data, symbol }: CandlestickChartProps
     candlestickSeriesRef.current = candlestickSeries;
 
     // 创建成交量柱状图序列
-    const volumeSeries = chart.addHistogramSeries({
+    const volumeSeries = chart.addSeries(HistogramSeries, {
       color: '#26a69a',
       priceFormat: {
         type: 'volume',
@@ -100,16 +129,16 @@ export default function CandlestickChart({ data, symbol }: CandlestickChartProps
     if (!candlestickSeriesRef.current || !volumeSeriesRef.current || data.length === 0) return;
 
     // 转换数据格式
-    const candlestickData: CandlestickData[] = data.map((kline) => ({
-      time: (kline.timestamp / 1000) as any,
+    const candlestickData = data.map((kline) => ({
+      time: Math.floor(kline.timestamp / 1000),
       open: kline.open,
       high: kline.high,
       low: kline.low,
       close: kline.close,
     }));
 
-    const volumeData: HistogramData[] = data.map((kline) => ({
-      time: (kline.timestamp / 1000) as any,
+    const volumeData = data.map((kline) => ({
+      time: Math.floor(kline.timestamp / 1000),
       value: kline.volume,
       color: kline.close >= kline.open ? '#26a69a80' : '#ef535080',
     }));

@@ -4,11 +4,18 @@
 import ccxt
 from typing import List, Dict, Optional, Any
 from datetime import datetime
-import logging
+from functools import lru_cache
 
 from app.core.config import settings
+from app.core.logging import get_logger
+from app.core.exceptions import (
+    UnsupportedFeatureException, 
+    DataFetchException,
+    RateLimitException,
+    ConfigurationException
+)
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ExchangeConnector:
@@ -29,7 +36,7 @@ class ExchangeConnector:
             config = {
                 'enableRateLimit': True,
                 'options': {
-                    'defaultType': 'spot',  # 现货交易
+                    'defaultType': 'future',  # 合约交易
                 }
             }
             
@@ -37,6 +44,9 @@ class ExchangeConnector:
             if settings.BINANCE_API_KEY and settings.BINANCE_SECRET:
                 config['apiKey'] = settings.BINANCE_API_KEY
                 config['secret'] = settings.BINANCE_SECRET
+                logger.debug("已配置交易所 API 认证")
+            else:
+                logger.warning("未配置交易所 API 密钥，仅可使用公开接口")
             
             # 如果使用测试网
             if settings.BINANCE_TESTNET and self.exchange_id == 'binance':
@@ -47,17 +57,28 @@ class ExchangeConnector:
                         'private': 'https://testnet.binancefuture.com/fapi/v1',
                     }
                 }
+                logger.info("使用币安测试网")
             
             self.exchange = exchange_class(config)
-            logger.info(f"成功初始化交易所: {self.exchange_id}")
+            logger.info(
+                "成功初始化交易所",
+                exchange=self.exchange_id,
+                rate_limit=config['enableRateLimit'],
+                testnet=settings.BINANCE_TESTNET
+            )
             
+        except AttributeError:
+            error_msg = f"不支持的交易所: {self.exchange_id}"
+            logger.error(error_msg)
+            raise ConfigurationException(error_msg, error_code="INVALID_EXCHANGE")
         except Exception as e:
-            logger.error(f"初始化交易所失败: {str(e)}")
-            raise
+            error_msg = f"初始化交易所失败: {str(e)}"
+            logger.exception(error_msg)
+            raise ConfigurationException(error_msg) from e
     
     def get_klines(
         self, 
-        symbol: str = None, 
+        symbol: str, 
         interval: str = '1h', 
         limit: int = 100,
         since: Optional[int] = None
@@ -74,9 +95,6 @@ class ExchangeConnector:
         Returns:
             K线数据列表
         """
-        if symbol is None:
-            symbol = settings.DEFAULT_SYMBOL
-        
         try:
             # 获取原始OHLCV数据
             ohlcv = self.exchange.fetch_ohlcv(
@@ -90,22 +108,37 @@ class ExchangeConnector:
             klines = []
             for candle in ohlcv:
                 klines.append({
-                    'timestamp': int(candle[0]),  # 时间戳
-                    'open': float(candle[1]),      # 开盘价
-                    'high': float(candle[2]),      # 最高价
-                    'low': float(candle[3]),       # 最低价
-                    'close': float(candle[4]),     # 收盘价
-                    'volume': float(candle[5])     # 成交量
+                    'timestamp': int(candle[0]),
+                    'open': float(candle[1]),
+                    'high': float(candle[2]),
+                    'low': float(candle[3]),
+                    'close': float(candle[4]),
+                    'volume': float(candle[5])
                 })
             
-            logger.info(f"成功获取 {symbol} {interval} K线数据，共 {len(klines)} 条")
+            logger.debug(
+                "成功获取K线数据",
+                symbol=symbol,
+                interval=interval,
+                count=len(klines),
+                time_range=f"{klines[0]['timestamp']} - {klines[-1]['timestamp']}" if klines else "empty"
+            )
             return klines
             
+        except ccxt.RateLimitExceeded as e:
+            error_msg = f"API 请求频率超限: {str(e)}"
+            logger.warning(error_msg, symbol=symbol, interval=interval)
+            raise RateLimitException(error_msg) from e
+        except ccxt.NetworkError as e:
+            error_msg = f"网络错误: {str(e)}"
+            logger.error(error_msg, symbol=symbol, interval=interval)
+            raise DataFetchException(error_msg, details={"symbol": symbol, "interval": interval}) from e
         except Exception as e:
-            logger.error(f"获取K线数据失败: {str(e)}")
-            raise
+            error_msg = f"获取K线数据失败: {str(e)}"
+            logger.exception(error_msg, symbol=symbol, interval=interval)
+            raise DataFetchException(error_msg, details={"symbol": symbol, "interval": interval}) from e
     
-    def get_ticker(self, symbol: str = None) -> Dict[str, Any]:
+    def get_ticker(self, symbol: str) -> Dict[str, Any]:
         """
         获取实时行情数据
         
@@ -115,9 +148,6 @@ class ExchangeConnector:
         Returns:
             行情数据字典
         """
-        if symbol is None:
-            symbol = settings.DEFAULT_SYMBOL
-        
         try:
             ticker = self.exchange.fetch_ticker(symbol)
             
@@ -141,12 +171,17 @@ class ExchangeConnector:
                 'timestamp': int(ticker['timestamp']) if ticker.get('timestamp') else int(datetime.now().timestamp() * 1000)
             }
             
-            logger.info(f"成功获取 {symbol} 实时行情")
+            logger.debug("成功获取实时行情", symbol=symbol, price=result['last'])
             return result
             
+        except ccxt.RateLimitExceeded as e:
+            error_msg = f"API 请求频率超限: {str(e)}"
+            logger.warning(error_msg, symbol=symbol)
+            raise RateLimitException(error_msg) from e
         except Exception as e:
-            logger.error(f"获取实时行情失败: {str(e)}")
-            raise
+            error_msg = f"获取实时行情失败: {str(e)}"
+            logger.exception(error_msg, symbol=symbol)
+            raise DataFetchException(error_msg, details={"symbol": symbol}) from e
     
     def get_symbols(self, quote: str = 'USDT', active_only: bool = True) -> List[Dict[str, Any]]:
         """
@@ -178,63 +213,114 @@ class ExchangeConnector:
                     'active': market.get('active', True)
                 })
             
-            logger.info(f"成功获取交易对列表，共 {len(symbols)} 个")
+            logger.info("成功获取交易对列表", quote=quote, count=len(symbols))
             return symbols
             
         except Exception as e:
-            logger.error(f"获取交易对列表失败: {str(e)}")
-            raise
+            error_msg = f"获取交易对列表失败: {str(e)}"
+            logger.exception(error_msg, quote=quote)
+            raise DataFetchException(error_msg, details={"quote": quote}) from e
     
-    def get_market_stats(self, symbol: str = None) -> Dict[str, Any]:
+    def get_funding_rate(self, symbol: str) -> Dict[str, Any]:
         """
-        获取市场统计数据（24h数据）
+        获取资金费率（合约市场）
         
         Args:
-            symbol: 交易对
+            symbol: 交易对，如 'BTC/USDT:USDT'
         
         Returns:
-            市场统计数据
+            资金费率数据
         """
-        if symbol is None:
-            symbol = settings.DEFAULT_SYMBOL
+        # 检查交易所是否支持资金费率
+        if not hasattr(self.exchange, 'fetch_funding_rate'):
+            error_msg = f"{self.exchange_id} 不支持资金费率查询"
+            logger.warning(error_msg, exchange=self.exchange_id, symbol=symbol)
+            raise UnsupportedFeatureException(
+                error_msg,
+                error_code="UNSUPPORTED_FUNDING_RATE",
+                details={"exchange": self.exchange_id, "feature": "funding_rate"}
+            )
         
         try:
-            ticker = self.exchange.fetch_ticker(symbol)
+            # 获取资金费率
+            funding_rate = self.exchange.fetch_funding_rate(symbol)
             
-            # 计算涨跌
-            change_24h = None
-            change_percentage_24h = None
-            if ticker.get('last') and ticker.get('open'):
-                change_24h = ticker['last'] - ticker['open']
-                change_percentage_24h = (change_24h / ticker['open']) * 100
-            
-            stats = {
+            result = {
                 'symbol': symbol,
-                'price': float(ticker['last']) if ticker.get('last') else 0.0,
-                'high_24h': float(ticker['high']) if ticker.get('high') else 0.0,
-                'low_24h': float(ticker['low']) if ticker.get('low') else 0.0,
-                'volume_24h': float(ticker['baseVolume']) if ticker.get('baseVolume') else 0.0,
-                'change_24h': change_24h if change_24h else 0.0,
-                'change_percentage_24h': round(change_percentage_24h, 2) if change_percentage_24h else 0.0,
-                'timestamp': int(ticker['timestamp']) if ticker.get('timestamp') else int(datetime.now().timestamp() * 1000)
+                'funding_rate': float(funding_rate.get('fundingRate', 0)) if funding_rate.get('fundingRate') else None,
+                'next_funding_time': int(funding_rate.get('fundingTimestamp', 0)) if funding_rate.get('fundingTimestamp') else None,
+                'timestamp': int(funding_rate.get('timestamp', datetime.now().timestamp() * 1000))
             }
             
-            logger.info(f"成功获取 {symbol} 市场统计数据")
-            return stats
+            logger.debug(
+                "成功获取资金费率",
+                symbol=symbol,
+                funding_rate=result['funding_rate'],
+                next_funding=result['next_funding_time']
+            )
+            return result
             
-        except Exception as e:
-            logger.error(f"获取市场统计数据失败: {str(e)}")
+        except UnsupportedFeatureException:
             raise
+        except Exception as e:
+            error_msg = f"获取资金费率失败: {str(e)}"
+            logger.exception(error_msg, symbol=symbol)
+            raise DataFetchException(error_msg, details={"symbol": symbol}) from e
+    
+    def get_open_interest(self, symbol: str) -> Dict[str, Any]:
+        """
+        获取持仓量（合约市场）
+        
+        Args:
+            symbol: 交易对，如 'BTC/USDT:USDT'
+        
+        Returns:
+            持仓量数据
+        """
+        # 检查交易所是否支持持仓量查询
+        if not hasattr(self.exchange, 'fetch_open_interest'):
+            error_msg = f"{self.exchange_id} 不支持持仓量查询"
+            logger.warning(error_msg, exchange=self.exchange_id, symbol=symbol)
+            raise UnsupportedFeatureException(
+                error_msg,
+                error_code="UNSUPPORTED_OPEN_INTEREST",
+                details={"exchange": self.exchange_id, "feature": "open_interest"}
+            )
+        
+        try:
+            # 获取持仓量
+            open_interest = self.exchange.fetch_open_interest(symbol)
+            
+            # CCXT 返回的字段是 openInterestAmount，不是 openInterest
+            oi_value = open_interest.get('openInterestAmount') or open_interest.get('openInterest')
+            
+            result = {
+                'symbol': symbol,
+                'open_interest': float(oi_value) if oi_value is not None else None,
+                'timestamp': int(open_interest.get('timestamp', datetime.now().timestamp() * 1000))
+            }
+            
+            logger.debug(
+                "成功获取持仓量",
+                symbol=symbol,
+                open_interest=result['open_interest']
+            )
+            return result
+            
+        except UnsupportedFeatureException:
+            raise
+        except Exception as e:
+            error_msg = f"获取持仓量失败: {str(e)}"
+            logger.exception(error_msg, symbol=symbol)
+            raise DataFetchException(error_msg, details={"symbol": symbol}) from e
 
 
-# 全局交易所连接器实例
-_exchange_connector: Optional[ExchangeConnector] = None
-
-
+@lru_cache(maxsize=1)
 def get_exchange_connector() -> ExchangeConnector:
-    """获取交易所连接器单例"""
-    global _exchange_connector
-    if _exchange_connector is None:
-        _exchange_connector = ExchangeConnector()
-    return _exchange_connector
+    """
+    获取交易所连接器单例
+    
+    使用 lru_cache 确保只创建一个实例，线程安全
+    """
+    return ExchangeConnector()
 

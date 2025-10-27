@@ -8,18 +8,25 @@ import logging
 import sys
 
 from app.core.config import settings
+from app.core.logging import setup_logging, InterceptHandler
+from app.core.exceptions import (
+    CryptoGoException,
+    UnsupportedFeatureException, 
+    DataFetchException,
+    RateLimitException,
+    ValidationException
+)
 from app.api.v1 import market
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
-)
+# 初始化 Loguru 日志系统
+logger = setup_logging()
 
-logger = logging.getLogger(__name__)
+# 拦截标准库 logging，转发到 Loguru
+logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
+logging.getLogger("uvicorn").handlers = [InterceptHandler()]
+logging.getLogger("uvicorn.access").handlers = [InterceptHandler()]
+logging.getLogger("uvicorn.error").handlers = [InterceptHandler()]
+logging.getLogger("fastapi").handlers = [InterceptHandler()]
 
 # 创建 FastAPI 应用
 app = FastAPI(
@@ -40,16 +47,129 @@ app.add_middleware(
 )
 
 
-# 全局异常处理
+# ============================================
+# 异常处理器
+# ============================================
+
+@app.exception_handler(UnsupportedFeatureException)
+async def unsupported_feature_handler(request: Request, exc: UnsupportedFeatureException):
+    """
+    不支持的功能异常处理
+    
+    返回 501 Not Implemented
+    """
+    logger.warning(
+        "不支持的功能",
+        error=exc.message,
+        path=str(request.url),
+        error_code=exc.error_code
+    )
+    return JSONResponse(
+        status_code=501,
+        content=exc.to_dict()
+    )
+
+
+@app.exception_handler(DataFetchException)
+async def data_fetch_exception_handler(request: Request, exc: DataFetchException):
+    """
+    数据获取失败异常处理
+    
+    返回 503 Service Unavailable
+    """
+    logger.error(
+        "数据获取失败",
+        error=exc.message,
+        path=str(request.url),
+        error_code=exc.error_code,
+        details=exc.details
+    )
+    return JSONResponse(
+        status_code=503,
+        content=exc.to_dict()
+    )
+
+
+@app.exception_handler(RateLimitException)
+async def rate_limit_exception_handler(request: Request, exc: RateLimitException):
+    """
+    频率限制异常处理
+    
+    返回 429 Too Many Requests
+    """
+    logger.warning(
+        "触发频率限制",
+        error=exc.message,
+        path=str(request.url),
+        error_code=exc.error_code
+    )
+    return JSONResponse(
+        status_code=429,
+        content=exc.to_dict(),
+        headers={"Retry-After": "60"}  # 建议 60 秒后重试
+    )
+
+
+@app.exception_handler(ValidationException)
+async def validation_exception_handler(request: Request, exc: ValidationException):
+    """
+    验证异常处理
+    
+    返回 400 Bad Request
+    """
+    logger.warning(
+        "参数验证失败",
+        error=exc.message,
+        path=str(request.url),
+        details=exc.details
+    )
+    return JSONResponse(
+        status_code=400,
+        content=exc.to_dict()
+    )
+
+
+@app.exception_handler(CryptoGoException)
+async def cryptogo_exception_handler(request: Request, exc: CryptoGoException):
+    """
+    应用自定义异常处理
+    
+    捕获所有继承自 CryptoGoException 的异常
+    """
+    logger.error(
+        "应用异常",
+        error=exc.message,
+        path=str(request.url),
+        error_code=exc.error_code,
+        details=exc.details
+    )
+    return JSONResponse(
+        status_code=500,
+        content=exc.to_dict()
+    )
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """全局异常处理器"""
-    logger.error(f"全局异常: {str(exc)}", exc_info=True)
+    """
+    全局异常处理器
+    
+    捕获所有未处理的异常
+    """
+    logger.exception(
+        "未处理的异常",
+        error=str(exc),
+        path=str(request.url),
+        exception_type=type(exc).__name__
+    )
     return JSONResponse(
         status_code=500,
         content={
-            "detail": str(exc),
-            "path": str(request.url)
+            "error_type": "internal_server_error",
+            "message": "服务器内部错误",
+            "details": {
+                "exception": str(exc) if settings.DEBUG else "Internal Server Error"
+            }
         }
     )
 

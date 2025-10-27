@@ -1,12 +1,15 @@
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-ccxt==4.5.12
-pandas>=2.1.0
-python-dotenv==1.0.0
-sqlalchemy==2.0.0
-asyncpg==0.29.0
-redis==5.0.0
-apscheduler==3.10.4
-pydantic==2.4.2
-pydantic-settings==2.0.3
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+ccxt>=4.5.12
+pandas>=2.2.0
+pandas-ta>=0.4.67b0
+numpy>=1.26.0
+python-dotenv>=1.0.0
+sqlalchemy>=2.0.30
+asyncpg>=0.29.0
+redis>=5.0.0
+apscheduler>=3.10.4
+pydantic>=2.9.0
+pydantic-settings>=2.5.0
+loguru>=0.7.0
 

@@ -1,3 +1,19 @@
+/**
+ * 首页组件 (Home Page)
+ * 
+ * 文件作用：
+ * - 项目首页/欢迎页面
+ * - 展示项目介绍和核心特性
+ * - 提供导航入口（进入交易终端）
+ * 
+ * 路由：
+ * - 访问路径: /
+ * 
+ * 功能：
+ * - 展示 CryptoGo 品牌和标语
+ * - 展示三大核心特性：实时数据、智能分析、可视化
+ * - 提供进入交易终端的按钮链接
+ */
 import Link from "next/link";
 
 export default function Home() {
@@ -20,14 +36,6 @@ export default function Home() {
           >
             进入交易终端
           </Link>
-          <a
-            href="http://localhost:9527/docs"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-8 py-3 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-semibold transition-colors"
-          >
-            查看 API 文档
-          </a>
         </div>
 
         <div className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-3xl">

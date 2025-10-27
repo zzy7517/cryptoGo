@@ -1,13 +1,49 @@
 'use client';
 
 /**
- * 交易页面
+ * 交易终端页面 (Trading Terminal Page)
+ * 
+ * 文件作用：
+ * - 🎯 核心页面：加密货币交易终端主界面
+ * - 集成所有交易相关的数据展示和交互功能
+ * 
+ * 路由：
+ * - 访问路径: /trading
+ * 
+ * 主要功能：
+ * 1. 交易对选择 - 支持多个币种永续合约
+ * 2. 时间周期切换 - 1分钟、5分钟、15分钟、1小时、4小时、1天
+ * 3. K线图表展示 - 使用 Lightweight Charts 渲染专业图表
+ * 4. 实时价格监控 - 5秒刷新一次
+ * 5. 24小时统计数据 - 最高价、最低价、成交量
+ * 6. 订单簿信息 - 买一价、卖一价、价差
+ * 7. 技术指标面板 - EMA、MACD、RSI、ATR
+ * 8. 合约数据展示 - 资金费率、持仓量
+ * 
+ * 数据获取策略：
+ * - K线数据：30秒自动刷新
+ * - 实时价格：5秒自动刷新
+ * - 技术指标：30秒自动刷新
+ * - 资金费率/持仓量：60秒自动刷新
+ * 
+ * 状态管理：
+ * - 使用 Zustand 管理全局状态（交易对、时间周期、数据）
+ * - 使用 React Query 管理异步数据获取和缓存
+ * 
+ * UI特性：
+ * - 响应式布局（桌面端4列网格，移动端单列）
+ * - 价格变化动画（涨绿跌红）
+ * - 自定义滚动条样式
+ * - 暗色主题设计
  */
 import React, { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import CandlestickChart from '@/components/CandlestickChart';
+import TechnicalIndicators from '@/components/TechnicalIndicators';
+import ContractData from '@/components/ContractData';
 import { useMarketStore } from '@/stores/marketStore';
 import { marketApi } from '@/lib/api';
+import { TRADING_PAIRS, getCoinName } from '@/config/tradingPairs';
 import type { TimeInterval } from '@/types/market';
 
 const INTERVALS: { value: TimeInterval; label: string }[] = [
@@ -48,6 +84,27 @@ export default function TradingPage() {
     refetchInterval: 5000, // 5秒自动刷新
   });
 
+  // 获取技术指标
+  const { data: indicators, isLoading: indicatorsLoading } = useQuery({
+    queryKey: ['indicators', currentSymbol, currentInterval],
+    queryFn: () => marketApi.getIndicators(currentSymbol, currentInterval, 100, false),
+    refetchInterval: 30000, // 30秒自动刷新
+  });
+
+  // 获取资金费率
+  const { data: fundingRate, isLoading: fundingLoading } = useQuery({
+    queryKey: ['fundingRate', currentSymbol],
+    queryFn: () => marketApi.getFundingRate(currentSymbol),
+    refetchInterval: 60000, // 60秒自动刷新
+  });
+
+  // 获取持仓量
+  const { data: openInterest, isLoading: openInterestLoading } = useQuery({
+    queryKey: ['openInterest', currentSymbol],
+    queryFn: () => marketApi.getOpenInterest(currentSymbol),
+    refetchInterval: 60000, // 60秒自动刷新
+  });
+
   // 更新K线数据
   useEffect(() => {
     if (klineResponse?.data) {
@@ -76,7 +133,7 @@ export default function TradingPage() {
     }
   }, [tickerData, previousPrice]);
 
-  const handleSymbolChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSymbolChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setCurrentSymbol(e.target.value);
   };
 
@@ -114,13 +171,17 @@ export default function TradingPage() {
             {/* 交易对选择 */}
             <div>
               <label className="block text-sm text-gray-400 mb-1">交易对</label>
-              <input
-                type="text"
+              <select
                 value={currentSymbol}
                 onChange={handleSymbolChange}
-                className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500"
-                placeholder="BTC/USDT"
-              />
+                className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500 cursor-pointer min-w-[200px]"
+              >
+                {TRADING_PAIRS.map((pair) => (
+                  <option key={pair.symbol} value={pair.symbol} className="bg-gray-800">
+                    {pair.symbol} - {pair.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* 时间周期选择 */}
@@ -153,7 +214,7 @@ export default function TradingPage() {
           </div>
 
           {/* 右侧信息面板 - 占1列 */}
-          <div className="space-y-4">
+          <div className="space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto custom-scrollbar">
             {/* 实时价格 */}
             <div className="bg-gray-900 rounded-lg p-4">
               <h3 className="text-sm text-gray-400 mb-3">实时价格</h3>
@@ -236,9 +297,40 @@ export default function TradingPage() {
                 </div>
               </div>
             </div>
+
+            {/* 技术指标 */}
+            <TechnicalIndicators
+              indicators={indicators?.latest_values || null}
+              loading={indicatorsLoading}
+            />
+
+            {/* 合约数据 */}
+            <ContractData
+              fundingRate={fundingRate || null}
+              openInterest={openInterest || null}
+              loading={fundingLoading || openInterestLoading}
+            />
           </div>
         </div>
       </div>
+
+      {/* 自定义滚动条样式 */}
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: #1a1a1a;
+          border-radius: 3px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #4a4a4a;
+          border-radius: 3px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #5a5a5a;
+        }
+      `}</style>
     </div>
   );
 }

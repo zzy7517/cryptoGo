@@ -3,7 +3,6 @@
 """
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
-import logging
 
 from app.schemas.market import (
     KlineResponse, 
@@ -11,18 +10,23 @@ from app.schemas.market import (
     TickerData, 
     SymbolListResponse,
     SymbolInfo,
-    MarketStats
+    FundingRateData,
+    OpenInterestData,
+    IndicatorsResponse
 )
 from app.services.data_collector import get_exchange_connector
+from app.services.indicators import get_indicators_calculator
+from app.core.config import settings
+from app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/market", tags=["market"])
 
 
 @router.get("/klines", response_model=KlineResponse)
 async def get_klines(
-    symbol: str = Query(default="BTC/USDT", description="交易对，如 BTC/USDT"),
+    symbol: str = Query(default=settings.DEFAULT_SYMBOL, description="交易对，如 BTC/USDT"),
     interval: str = Query(default="1h", description="时间周期: 1m, 5m, 15m, 1h, 4h, 1d"),
     limit: int = Query(default=100, ge=1, le=1000, description="返回数据条数"),
     since: Optional[int] = Query(default=None, description="起始时间戳（毫秒）")
@@ -40,12 +44,7 @@ async def get_klines(
     """
     try:
         connector = get_exchange_connector()
-        klines_data = connector.get_klines(
-            symbol=symbol,
-            interval=interval,
-            limit=limit,
-            since=since
-        )
+        klines_data = connector.get_klines(symbol, interval, limit, since)
         
         return KlineResponse(
             symbol=symbol,
@@ -60,7 +59,7 @@ async def get_klines(
 
 @router.get("/ticker", response_model=TickerData)
 async def get_ticker(
-    symbol: str = Query(default="BTC/USDT", description="交易对，如 BTC/USDT")
+    symbol: str = Query(default=settings.DEFAULT_SYMBOL, description="交易对，如 BTC/USDT")
 ):
     """
     获取实时行情数据
@@ -69,7 +68,7 @@ async def get_ticker(
     """
     try:
         connector = get_exchange_connector()
-        ticker_data = connector.get_ticker(symbol=symbol)
+        ticker_data = connector.get_ticker(symbol)
         
         return TickerData(**ticker_data)
     except Exception as e:
@@ -83,7 +82,7 @@ async def get_symbols(
     active_only: bool = Query(default=True, description="是否只返回活跃交易对")
 ):
     """
-    获取交易对列表
+    获取交易对列表（从交易所获取）
     
     返回指定计价货币的所有交易对
     """
@@ -100,42 +99,110 @@ async def get_symbols(
         raise HTTPException(status_code=500, detail=f"获取交易对列表失败: {str(e)}")
 
 
-@router.get("/stats", response_model=MarketStats)
-async def get_market_stats(
-    symbol: str = Query(default="BTC/USDT", description="交易对，如 BTC/USDT")
+@router.get("/funding-rate", response_model=FundingRateData)
+async def get_funding_rate(
+    symbol: str = Query(default=settings.DEFAULT_SYMBOL, description="交易对，如 BTC/USDT")
 ):
     """
-    获取市场统计数据（24h数据）
+    获取资金费率（仅限合约市场）
     
-    返回24小时内的最高价、最低价、成交量、涨跌幅等统计信息
+    返回当前资金费率和下次结算时间
     """
     try:
         connector = get_exchange_connector()
-        stats_data = connector.get_market_stats(symbol=symbol)
+        funding_data = connector.get_funding_rate(symbol)
         
-        return MarketStats(**stats_data)
+        return FundingRateData(**funding_data)
     except Exception as e:
-        logger.error(f"获取市场统计数据失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"获取市场统计数据失败: {str(e)}")
+        logger.error(f"获取资金费率失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取资金费率失败: {str(e)}")
 
 
-@router.get("/health")
-async def health_check():
+@router.get("/open-interest", response_model=OpenInterestData)
+async def get_open_interest(
+    symbol: str = Query(default=settings.DEFAULT_SYMBOL, description="交易对，如 BTC/USDT")
+):
     """
-    健康检查
+    获取持仓量（仅限合约市场）
     
-    检查交易所连接是否正常
+    返回当前持仓量
     """
     try:
         connector = get_exchange_connector()
-        # 尝试获取一个简单的数据来验证连接
-        ticker = connector.get_ticker()
-        return {
-            "status": "healthy",
-            "exchange": connector.exchange_id,
-            "message": "交易所连接正常"
-        }
+        oi_data = connector.get_open_interest(symbol)
+        
+        return OpenInterestData(**oi_data)
     except Exception as e:
-        logger.error(f"健康检查失败: {str(e)}")
-        raise HTTPException(status_code=503, detail=f"交易所连接异常: {str(e)}")
+        logger.error(f"获取持仓量失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取持仓量失败: {str(e)}")
+
+
+@router.get("/indicators", response_model=IndicatorsResponse)
+async def get_indicators(
+    symbol: str = Query(default=settings.DEFAULT_SYMBOL, description="交易对，如 BTC/USDT"),
+    interval: str = Query(default="1h", description="时间周期: 1m, 5m, 15m, 1h, 4h, 1d"),
+    limit: int = Query(default=100, ge=1, le=1000, description="K线数据条数"),
+    include_series: bool = Query(default=False, description="是否包含时序数据")
+):
+    """
+    获取技术指标
+    
+    计算并返回多种技术指标，包括：
+    - EMA (20, 50)
+    - MACD
+    - RSI (7, 14)
+    - ATR (3, 14)
+    
+    可选择是否返回完整时序数据
+    """
+    try:
+        # 获取K线数据
+        connector = get_exchange_connector()
+        klines_data = connector.get_klines(
+            symbol=symbol,
+            interval=interval,
+            limit=limit
+        )
+        
+        if not klines_data:
+            raise HTTPException(status_code=404, detail="无法获取K线数据")
+        
+        # 计算指标
+        calculator = get_indicators_calculator()
+        
+        # 获取最新值
+        latest_values = calculator.get_latest_values(klines_data)
+        
+        # 构建响应
+        response_data = {
+            "symbol": symbol,
+            "interval": interval,
+            "latest_values": latest_values
+        }
+        
+        # 如果需要时序数据
+        if include_series:
+            all_indicators = calculator.calculate_all_indicators(klines_data)
+            
+            series_data = {
+                "timestamps": all_indicators['timestamps'],
+                "ema20": all_indicators['ema']['ema20'],
+                "ema50": all_indicators['ema']['ema50'],
+                "macd": all_indicators['macd']['macd'],
+                "signal": all_indicators['macd']['signal'],
+                "histogram": all_indicators['macd']['histogram'],
+                "rsi7": all_indicators['rsi']['rsi7'],
+                "rsi14": all_indicators['rsi']['rsi14'],
+                "atr3": all_indicators['atr']['atr3'],
+                "atr14": all_indicators['atr']['atr14'],
+            }
+            response_data["series_data"] = series_data
+        
+        return IndicatorsResponse(**response_data)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取技术指标失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取技术指标失败: {str(e)}")
 

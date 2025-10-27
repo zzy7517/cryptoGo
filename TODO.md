@@ -159,42 +159,9 @@ cryptoGo/
 - [x] 最新成交量实时更新
 - [ ] WebSocket推送（可选，后续优化）
 
-### Phase 4: Docker环境（可选）
+### Phase 4: 简单AI决策（待定）
 
-- [ ] 创建 docker-compose.yml
-- [ ] PostgreSQL容器配置
-- [ ] Redis容器配置
-- [ ] 后端服务容器化（可选）
-- [ ] 前端服务容器化（可选）
-
-> 注：本地开发可直接用本机数据库，Docker可后续再配置
-
-### Phase 5: 数据持久化
-
-**5.1 数据库配置**
-- [ ] 更新 `backend/.env`
-  ```bash
-  # 数据库配置
-  DATABASE_URL=postgresql://postgres:password@localhost:5432/cryptogo
-  REDIS_URL=redis://localhost:6379/0
-  ```
-- [ ] 本地安装PostgreSQL和Redis（或使用Docker）
-
-**5.2 数据库设计**
-- [ ] PostgreSQL Schema（klines, symbols, accounts, orders, positions, ai_decisions）
-- [ ] Alembic迁移脚本
-- [ ] K线数据入库
-- [ ] 数据查询优化（索引）
-
-### Phase 6: 定时任务
-
-- [ ] APScheduler配置
-- [ ] 定时采集K线（5分钟）
-- [ ] 账户数据同步（1分钟）
-
-### Phase 7: 简单AI决策（待定）
-
-**7.1 LLM配置**
+**4.1 LLM配置**
 - [ ] 更新 `backend/.env`（根据选择的LLM）
   ```bash
   # AI配置 (选择一种)
@@ -217,23 +184,23 @@ cryptoGo/
   RISK_PER_TRADE=0.02
   ```
 
-**7.2 AI集成**
+**4.2 AI集成**
 - [ ] LLM API配置（待选择：GPT-4/Claude/本地模型）
 - [ ] 基础Prompt模板
 - [ ] 结构化输出解析
 
-**7.3 分析功能**
+**4.3 分析功能**
 - [ ] 技术指标计算（MA, RSI, MACD）
 - [ ] K线数据文本化（OHLCV数据 + 技术指标）
 - [ ] LLM分析市场数据
 - [ ] 生成交易信号（BUY/SELL/HOLD + 置信度 + 止损止盈）
 
-**7.4 决策记录**
-- [ ] 保存AI决策到数据库
+**4.4 决策记录**
+- [ ] 保存AI决策到内存或临时存储
 - [ ] API查询历史决策
 - [ ] 前端展示AI决策
 
-**7.5 市场数据输入格式示例**
+**4.5 市场数据输入格式示例**
 ```
 当前指标:
 - Price: 113472.5
@@ -262,33 +229,66 @@ cryptoGo/
 
 > 注：LLM选型待定，可根据需求选择不同模型
 
-### Phase 8: 交易执行
+### Phase 5: 交易执行
 
-**8.1 订单管理**
+**5.1 订单管理**
 - [ ] 创建订单（市价/限价）
 - [ ] 取消订单
 - [ ] 订单状态追踪
 
-**8.2 风控**
+**5.2 风控**
 - [ ] 余额检查
 - [ ] 单笔限额
 - [ ] 日交易次数限制
 
-**8.3 交易模式**
+**5.3 交易模式**
 - [ ] 手动确认模式
 - [ ] 模拟交易（Paper Trading）
 
-### Phase 9: 前端完善
+### Phase 6: 数据持久化（交易记录）
+
+**6.1 数据库配置**
+- [ ] 更新 `backend/.env`
+  ```bash
+  # 数据库配置
+  DATABASE_URL=postgresql://postgres:password@localhost:5432/cryptogo
+  REDIS_URL=redis://localhost:6379/0
+  ```
+- [ ] 本地安装PostgreSQL和Redis（或使用Docker）
+
+**6.2 数据库设计**
+- [ ] PostgreSQL Schema（主要用于交易记录：orders, positions, ai_decisions）
+- [ ] Alembic迁移脚本
+- [ ] 交易记录入库
+- [ ] 数据查询优化（索引）
+
+### Phase 7: 定时任务
+
+- [ ] APScheduler配置
+- [ ] 定时采集K线（5分钟）
+- [ ] 账户数据同步（1分钟）
+
+### Phase 8: 前端完善
 
 - [ ] Dashboard页面（资产、持仓、AI决策）
 - [ ] History页面（交易历史、AI决策历史）
 - [ ] Header/Sidebar布局
 - [ ] shadcn/ui组件
 
+### Phase 9: Docker环境（可选）
+
+- [ ] 创建 docker-compose.yml
+- [ ] PostgreSQL容器配置
+- [ ] Redis容器配置
+- [ ] 后端服务容器化（可选）
+- [ ] 前端服务容器化（可选）
+- [ ] Docker Compose本地部署
+
+> 注：本地开发可直接用本机数据库，Docker可后续再配置
+
 ### Phase 10: 测试部署
 
 - [ ] 功能测试（数据采集、AI分析、交易）
-- [ ] Docker Compose本地部署
 - [ ] 测试网验证
 
 ---
@@ -312,7 +312,13 @@ cryptoGo/
 - [ ] 策略回测系统
 - [ ] 网格交易
 - [ ] TimescaleDB升级
-- [ ] WebSocket实时推送
+- [ ] **WebSocket实时推送优化** ⭐
+  - [ ] 后端：实现 WebSocket 端点（`/ws/ticker/{symbol}` 和 `/ws/kline/{symbol}/{interval}`）
+  - [ ] 后端：添加 ConnectionManager 管理连接、实现广播机制
+  - [ ] 前端：创建 useWebSocket hooks 替换 HTTP 轮询
+  - [ ] 前端：实现断线重连和降级机制
+  - [ ] 混合架构：WebSocket 用于实时数据（1秒级），HTTP REST 保留用于历史数据
+  - [ ] 参考 Binance API 架构，预期效果：延迟从5秒降至1秒内，带宽节省70-90%
 - [ ] Celery任务队列
 
 ### Phase 13: 生产优化
@@ -325,4 +331,4 @@ cryptoGo/
 
 ---
 
-**最后更新**: 2025-10-26
+**最后更新**: 2025-10-27
