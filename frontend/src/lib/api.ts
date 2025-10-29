@@ -1,6 +1,9 @@
 /**
  * API 客户端 (API Client)
  * 
+ * 封装所有与后端的 HTTP 通信，提供类型安全的 API 调用方法
+ * 创建时间: 2025-10-27
+ * 
  * 文件作用：
  * - 封装所有与后端的 HTTP 通信
  * - 提供类型安全的 API 调用方法
@@ -133,6 +136,66 @@ export const marketApi = {
     const response = await apiClient.get('/api/v1/market/indicators', {
       params: { symbol, interval, limit, include_series: includeSeries },
     });
+    return response.data;
+  },
+};
+
+/**
+ * Agent API
+ * 交易代理控制 API
+ */
+export const agentApi = {
+  /**
+   * 启动交易代理
+   */
+  startAgent: async (params: {
+    session_id?: number;
+    decision_interval?: number;
+    symbols?: string[];
+    risk_params?: Record<string, any>;
+  }): Promise<any> => {
+    const response = await apiClient.post('/api/v1/agent/start', params);
+    return response.data;
+  },
+
+  /**
+   * 停止交易代理
+   */
+  stopAgent: async (session_id?: number): Promise<any> => {
+    const response = await apiClient.post('/api/v1/agent/stop', {
+      session_id,
+    });
+    return response.data;
+  },
+
+  /**
+   * 获取代理状态
+   */
+  getAgentStatus: async (session_id?: number): Promise<any> => {
+    const response = await apiClient.get('/api/v1/agent/status', {
+      params: { session_id },
+    });
+    return response.data;
+  },
+
+  /**
+   * 列出所有运行中的代理
+   */
+  listRunningAgents: async (): Promise<any> => {
+    const response = await apiClient.get('/api/v1/agent/list');
+    return response.data;
+  },
+
+  /**
+   * 更新代理配置
+   */
+  updateAgentConfig: async (params: {
+    session_id?: number;
+    decision_interval?: number;
+    symbols?: string[];
+    risk_params?: Record<string, any>;
+  }): Promise<any> => {
+    const response = await apiClient.patch('/api/v1/agent/config', params);
     return response.data;
   },
 };

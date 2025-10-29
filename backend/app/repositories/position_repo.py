@@ -1,0 +1,255 @@
+"""
+持仓 Repository
+管理持仓数据的访问层，支持基于会话的持仓管理和盈亏计算
+修改时间: 2025-10-29 (添加会话支持)
+"""
+from typing import List, Optional
+from sqlalchemy.orm import Session
+from sqlalchemy import desc
+from decimal import Decimal
+
+from app.models.position import Position
+from app.repositories.base import BaseRepository
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+class PositionRepository(BaseRepository[Position]):
+    """持仓数据访问层"""
+    
+    def __init__(self, db: Session):
+        super().__init__(Position, db)
+    
+    def create_position(
+        self,
+        session_id: int,
+        symbol: str,
+        side: str,
+        quantity: Decimal,
+        entry_price: Decimal,
+        leverage: int = 1,
+        stop_loss: Optional[Decimal] = None,
+        take_profit: Optional[Decimal] = None,
+        ai_decision_id: Optional[int] = None,
+        entry_order_id: Optional[int] = None
+    ) -> Position:
+        """
+        创建持仓
+        
+        Args:
+            session_id: 所属会话 ID
+            symbol: 交易对
+            side: 持仓方向 (long, short)
+            quantity: 数量
+            entry_price: 入场价格
+            leverage: 杠杆
+            stop_loss: 止损价
+            take_profit: 止盈价
+            ai_decision_id: 关联的 AI 决策 ID
+            entry_order_id: 入场订单 ID
+            
+        Returns:
+            创建的 Position 实例
+        """
+        try:
+            position = self.create(
+                session_id=session_id,
+                symbol=symbol,
+                side=side,
+                quantity=quantity,
+                entry_price=entry_price,
+                current_price=entry_price,
+                leverage=leverage,
+                stop_loss=stop_loss,
+                take_profit=take_profit,
+                ai_decision_id=ai_decision_id,
+                entry_order_id=entry_order_id,
+                status="active"
+            )
+            
+            logger.info(
+                "持仓已创建",
+                position_id=position.id,
+                session_id=session_id,
+                symbol=symbol,
+                side=side,
+                quantity=quantity,
+                entry_price=entry_price
+            )
+            
+            return position
+            
+        except Exception as e:
+            logger.error(f"创建持仓失败: {str(e)}")
+            raise
+    
+    def get_active_positions(self, session_id: int) -> List[Position]:
+        """
+        获取指定会话的所有活跃持仓
+        
+        Args:
+            session_id: 会话 ID
+        
+        Returns:
+            活跃持仓列表
+        """
+        return self.db.query(Position)\
+            .filter(
+                Position.session_id == session_id,
+                Position.status == "active"
+            )\
+            .all()
+    
+    def get_by_symbol(
+        self,
+        session_id: int,
+        symbol: str,
+        active_only: bool = True
+    ) -> List[Position]:
+        """
+        根据会话和交易对获取持仓
+        
+        Args:
+            session_id: 会话 ID
+            symbol: 交易对
+            active_only: 是否只返回活跃持仓
+            
+        Returns:
+            持仓列表
+        """
+        query = self.db.query(Position).filter(
+            Position.session_id == session_id,
+            Position.symbol == symbol
+        )
+        
+        if active_only:
+            query = query.filter(Position.status == "active")
+        
+        return query.order_by(desc(Position.created_at)).all()
+    
+    def update_price(
+        self,
+        position_id: int,
+        current_price: Decimal
+    ) -> Optional[Position]:
+        """
+        更新持仓当前价格和未实现盈亏
+        
+        Args:
+            position_id: 持仓 ID
+            current_price: 当前价格
+            
+        Returns:
+            更新后的持仓或 None
+        """
+        position = self.get_by_id(position_id)
+        if not position:
+            return None
+        
+        # 计算未实现盈亏
+        unrealized_pnl = (current_price - position.entry_price) * position.quantity * position.leverage
+        
+        return self.update(
+            position_id,
+            current_price=current_price,
+            unrealized_pnl=unrealized_pnl
+        )
+    
+    def close_position(
+        self,
+        position_id: int,
+        exit_price: Decimal,
+        exit_order_id: Optional[int] = None
+    ) -> Optional[Position]:
+        """
+        平仓
+        
+        Args:
+            position_id: 持仓 ID
+            exit_price: 出场价格
+            exit_order_id: 出场订单 ID
+            
+        Returns:
+            更新后的持仓或 None
+        """
+        position = self.get_by_id(position_id)
+        if not position:
+            return None
+        
+        # 计算已实现盈亏
+        realized_pnl = (exit_price - position.entry_price) * position.quantity * position.leverage
+        
+        updated = self.update(
+            position_id,
+            status="closed",
+            current_price=exit_price,
+            realized_pnl=realized_pnl,
+            unrealized_pnl=Decimal(0),
+            exit_order_id=exit_order_id
+        )
+        
+        if updated:
+            logger.info(
+                "持仓已平仓",
+                position_id=position_id,
+                symbol=position.symbol,
+                realized_pnl=realized_pnl
+            )
+        
+        return updated
+    
+    def get_total_pnl(
+        self,
+        session_id: int,
+        symbol: Optional[str] = None
+    ) -> Decimal:
+        """
+        计算指定会话的总盈亏
+        
+        Args:
+            session_id: 会话 ID
+            symbol: 可选，指定交易对
+            
+        Returns:
+            总盈亏
+        """
+        query = self.db.query(Position).filter(Position.session_id == session_id)
+        
+        if symbol:
+            query = query.filter(Position.symbol == symbol)
+        
+        positions = query.all()
+        
+        total_pnl = Decimal(0)
+        for pos in positions:
+            # 已实现盈亏
+            if pos.realized_pnl:
+                total_pnl += pos.realized_pnl
+            # 未实现盈亏（仅活跃持仓）
+            if pos.status == "active" and pos.unrealized_pnl:
+                total_pnl += pos.unrealized_pnl
+        
+        return total_pnl
+    
+    def get_by_session(
+        self,
+        session_id: int,
+        limit: int = 100
+    ) -> List[Position]:
+        """
+        获取指定会话的所有持仓
+        
+        Args:
+            session_id: 会话 ID
+            limit: 返回数量
+            
+        Returns:
+            持仓列表
+        """
+        return self.db.query(Position)\
+            .filter(Position.session_id == session_id)\
+            .order_by(desc(Position.created_at))\
+            .limit(limit)\
+            .all()
+

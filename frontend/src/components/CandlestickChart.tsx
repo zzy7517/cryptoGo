@@ -3,6 +3,9 @@
 /**
  * K线图组件 (Candlestick Chart Component)
  * 
+ * 渲染专业级加密货币K线图表，使用 TradingView 的 Lightweight Charts 库
+ * 创建时间: 2025-10-27
+ * 
  * 文件作用：
  * - 渲染专业级加密货币K线图表
  * - 使用 TradingView 的 Lightweight Charts 库

@@ -1,5 +1,7 @@
 """
 核心配置模块
+使用 Pydantic Settings 管理应用配置，支持环境变量和 .env 文件
+创建时间: 2025-10-27
 """
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
@@ -22,6 +24,15 @@ class Settings(BaseSettings):
     
     # 默认交易对（合约格式）
     DEFAULT_SYMBOL: str = "BTC/USDT:USDT"
+    
+    # AI 配置 - DeepSeek
+    DEEPSEEK_API_KEY: Optional[str] = None
+    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
+    DEEPSEEK_MODEL: str = "deepseek-chat"
+    
+    # 数据库配置 - Supabase PostgreSQL
+    DATABASE_URL: Optional[str] = None
+    # 格式示例: postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres
     
     # CORS 配置
     CORS_ORIGINS: list = [

@@ -1,0 +1,151 @@
+It has been 8258 minutes since you started trading. The current time is 2025-10-28 06:43:31.679263 and you've been invoked 3384 times. Below, we are providing you with a variety of state data, price data, and predictive signals so you can discover alpha. Below that is your current account information, value, performance, positions, etc.
+
+ALL OF THE PRICE OR SIGNAL DATA BELOW IS ORDERED: OLDEST → NEWEST
+
+Timeframes note: Unless stated otherwise in a section title, intraday series are provided at 3‑minute intervals. If a coin uses a different interval, it is explicitly stated in that coin’s section.
+
+CURRENT MARKET STATE FOR ALL COINS
+ALL BTC DATA
+current_price = 114005.5, current_ema20 = 113846.127, current_macd = 28.417, current_rsi (7 period) = 76.283
+
+In addition, here is the latest BTC open interest and funding rate for perps (the instrument you are trading):
+
+Open Interest: Latest: 29923.68 Average: 30024.33
+
+Funding Rate: 1.25e-05
+
+Intraday series (by minute, oldest → latest):
+
+Mid prices: [113793.0, 113797.5, 113801.5, 113809.5, 113837.0, 113815.5, 113862.5, 113916.5, 113982.5, 114005.5]
+
+EMA indicators (20‑period): [113775.467, 113778.375, 113778.435, 113784.108, 113789.145, 113790.369, 113803.096, 113814.039, 113830.036, 113846.127]
+
+MACD indicators: [-38.569, -32.384, -29.323, -21.884, -15.886, -13.798, -2.273, 6.304, 18.058, 28.417]
+
+RSI indicators (7‑Period): [54.521, 58.316, 52.768, 61.987, 61.749, 53.37, 69.951, 68.553, 74.819, 76.283]
+
+RSI indicators (14‑Period): [50.785, 52.838, 50.393, 55.263, 55.164, 51.68, 60.941, 60.329, 64.434, 65.457]
+
+Longer‑term context (4‑hour timeframe):
+
+20‑Period EMA: 113265.68 vs. 50‑Period EMA: 111841.869
+
+3‑Period ATR: 402.153 vs. 14‑Period ATR: 570.686
+
+Current Volume: 40.055 vs. Average Volume: 4682.546
+
+MACD indicators: [880.54, 953.796, 1069.243, 1195.451, 1318.999, 1387.044, 1397.426, 1374.479, 1278.614, 1173.061]
+
+RSI indicators (14‑Period): [68.994, 68.466, 72.078, 74.284, 75.921, 74.101, 70.503, 68.502, 60.863, 59.054]
+
+ALL ETH DATA
+current_price = 4096.75, current_ema20 = 4085.911, current_macd = 0.69, current_rsi (7 period) = 78.189
+
+In addition, here is the latest ETH open interest and funding rate for perps:
+
+Open Interest: Latest: 513242.17 Average: 513964.59
+
+Funding Rate: 1.25e-05
+
+Intraday series (3‑minute intervals, oldest → latest):
+
+Mid prices: [4078.05, 4081.9, 4081.0, 4080.9, 4084.15, 4083.25, 4087.85, 4092.35, 4094.35, 4096.75]
+
+EMA indicators (20‑period): [4081.528, 4081.601, 4081.363, 4081.51, 4081.766, 4081.769, 4082.753, 4083.615, 4084.775, 4085.911]
+
+MACD indicators: [-6.26, -5.494, -5.087, -4.407, -3.72, -3.331, -2.167, -1.254, -0.205, 0.69]
+
+RSI indicators (7‑Period): [47.383, 61.813, 50.356, 60.499, 63.478, 54.609, 73.292, 72.281, 77.178, 78.189]
+
+RSI indicators (14‑Period): [41.668, 49.113, 44.74, 50.389, 52.189, 48.677, 60.853, 60.404, 64.201, 65.014]
+
+Longer‑term context (4‑hour timeframe):
+
+20‑Period EMA: 4066.262 vs. 50‑Period EMA: 4004.001
+
+3‑Period ATR: 33.636 vs. 14‑Period ATR: 36.282
+
+Current Volume: 326.155 vs. Average Volume: 98457.430
+
+MACD indicators: [29.422, 34.921, 46.09, 57.993, 66.498, 69.301, 71.887, 73.039, 68.315, 61.96]
+
+RSI indicators (14‑Period): [66.948, 66.376, 73.179, 75.846, 75.495, 68.83, 69.918, 69.794, 59.954, 56.594]
+
+
+ALL BNB DATA
+current_price = 1128.95, current_ema20 = 1127.561, current_macd = -1.745, current_rsi (7 period) = 65.07
+
+In addition, here is the latest BNB open interest and funding rate for perps:
+
+Open Interest: Latest: 74484.79 Average: 74504.6
+
+Funding Rate: -1.85329e-05
+
+Intraday series (3‑minute intervals, oldest → latest):
+
+BNB mid prices: [1124.8, 1125.1, 1125.45, 1125.75, 1126.6, 1126.5, 1127.25, 1127.0, 1128.0, 1128.95]
+
+EMA indicators (20‑period): [1128.334, 1128.035, 1127.746, 1127.599, 1127.532, 1127.396, 1127.444, 1127.383, 1127.441, 1127.561]
+
+MACD indicators: [-4.29, -4.052, -3.835, -3.525, -3.187, -2.949, -2.586, -2.359, -2.059, -1.745]
+
+RSI indicators (7‑Period): [33.938, 41.392, 39.892, 52.057, 57.861, 49.819, 63.233, 53.111, 61.047, 65.07]
+
+RSI indicators (14‑Period): [32.888, 36.05, 35.534, 40.983, 43.958, 41.39, 48.659, 44.987, 49.467, 51.926]
+
+Longer‑term context (4‑hour timeframe):
+
+20‑Period EMA: 1133.353 vs. 50‑Period EMA: 1124.812
+
+3‑Period ATR: 8.545 vs. 14‑Period ATR: 11.688
+
+Current Volume: 51.56 vs. Average Volume: 8740.115
+
+MACD indicators: [6.648, 6.648, 7.49, 8.949, 10.541, 13.679, 13.061, 12.269, 11.086, 10.064]
+
+RSI indicators (14‑Period): [58.528, 55.323, 59.43, 62.969, 65.012, 71.25, 55.713, 55.007, 53.087, 53.22]
+
+
+ALL DOGE DATA
+current_price = 0.199915, current_ema20 = 0.199, current_macd = 0.0, current_rsi (7 period) = 88.174
+
+In addition, here is the latest DOGE open interest and funding rate for perps:
+
+Open Interest: Latest: 585561346.0 Average: 585534900.8
+
+Funding Rate: -4.2235e-06
+
+Intraday series (3‑minute intervals, oldest → latest):
+
+DOGE mid prices: [0.199, 0.199, 0.199, 0.199, 0.199, 0.199, 0.199, 0.199, 0.2, 0.199915]
+
+EMA indicators (20‑period): [0.199, 0.199, 0.199, 0.199, 0.199, 0.199, 0.199, 0.199, 0.199, 0.199]
+
+MACD indicators: [-0.0, -0.0, -0.0, -0.0, -0.0, -0.0, -0.0, -0.0, -0.0, 0.0]
+
+RSI indicators (7‑Period): [38.14, 42.38, 39.242, 48.194, 48.194, 46.335, 77.16, 78.595, 85.131, 88.174]
+
+RSI indicators (14‑Period): [41.363, 42.864, 41.714, 44.898, 44.898, 44.336, 60.36, 61.552, 67.807, 71.423]
+
+Longer‑term context (4‑hour timeframe):
+
+20‑Period EMA: 0.2 vs. 50‑Period EMA: 0.199
+
+3‑Period ATR: 0.001 vs. 14‑Period ATR: 0.002
+
+Current Volume: 460667.0 vs. Average Volume: 80660279.347
+
+MACD indicators: [0.001, 0.002, 0.002, 0.002, 0.003, 0.003, 0.002, 0.002, 0.002, 0.002]
+
+RSI indicators (14‑Period): [64.514, 61.52, 67.573, 69.332, 66.415, 58.976, 58.871, 57.089, 51.277, 49.407]
+
+HERE IS YOUR ACCOUNT INFORMATION & PERFORMANCE
+Current Total Return (percent): 2.54%
+
+Available Cash: 3262.84
+
+Current Account Value: 10254.1
+
+Current live positions & performance: {'symbol': 'ETH', 'quantity': 1.26, 'entry_price': 3965.2, 'current_price': 4096.75, 'liquidation_price': 3647.82, 'unrealized_pnl': 165.75, 'leverage': 10, 'exit_plan': {'profit_target': 4361.33, 'stop_loss': 3766.76, 'invalidation_condition': 'If 4-hour MACD crosses below -30'}, 'confidence': 0.65, 'risk_usd': 250, 'sl_oid': 211178191415, 'tp_oid': 211178175501, 'wait_for_fill': False, 'entry_oid': 211178170740, 'notional_usd': 5161.9} {'symbol': 'SOL', 'quantity': 31.62, 'entry_price': 191.73, 'current_price': 199.845, 'liquidation_price': 177.22, 'unrealized_pnl': 256.6, 'leverage': 10, 'exit_plan': {'profit_target': 206.935, 'stop_loss': 183.955, 'invalidation_condition': 'If 4-hour MACD crosses below 0'}, 'confidence': 0.65, 'risk_usd': 242, 'sl_oid': 210822899930, 'tp_oid': 210822871884, 'wait_for_fill': False, 'entry_oid': 210822853401, 'notional_usd': 6319.1} {'symbol': 'XRP', 'quantity': 2303.0, 'entry_price': 2.43, 'current_price': 2.63625, 'liquidation_price': 2.25, 'unrealized_pnl': 464.17, 'leverage': 10, 'exit_plan': {'invalidation_condition': 'If 4-hour MACD crosses below -0.05', 'profit_target': 2.725, 'stop_loss': 2.336}, 'confidence': 0.65, 'risk_usd': 224.41, 'sl_oid': -1, 'tp_oid': -1, 'wait_for_fill': False, 'entry_oid': 206787882116, 'notional_usd': 6071.28} {'symbol': 'BTC', 'quantity': 0.17, 'entry_price': 109940.0, 'current_price': 114005.5, 'liquidation_price': 105967.53, 'unrealized_pnl': 691.14, 'leverage': 20, 'exit_plan': {'profit_target': 116716.25, 'stop_loss': 107105.6, 'invalidation_condition': 'If 4-hour MACD crosses below 0'}, 'confidence': 0.75, 'risk_usd': 453.89, 'sl_oid': 210686258576, 'tp_oid': 210686250437, 'wait_for_fill': False, 'entry_oid': 210686242021, 'notional_usd': 19380.94} {'symbol': 'DOGE', 'quantity': 68396.0, 'entry_price': 0.19, 'current_price': 0.199915, 'liquidation_price': 0.18, 'unrealized_pnl': 927.52, 'leverage': 10, 'exit_plan': {'invalidation_condition': 'If price closes below 0.18 on 4-hour timeframe', 'profit_target': 0.214303, 'stop_loss': 0.177039}, 'confidence': 0.65, 'risk_usd': 637.876, 'sl_oid': -1, 'tp_oid': -1, 'wait_for_fill': False, 'entry_oid': 204608277516, 'notional_usd': 13673.39} {'symbol': 'BNB', 'quantity': 6.33, 'entry_price': 1131.26, 'current_price': 1128.95, 'liquidation_price': 1072.29, 'unrealized_pnl': -14.61, 'leverage': 10, 'exit_plan': {'profit_target': 1263.64, 'stop_loss': 1083.12, 'invalidation_condition': 'If 4-hour MACD crosses below 0'}, 'confidence': 0.7, 'risk_usd': 285.1296, 'sl_oid': 210816544887, 'tp_oid': 210816525945, 'wait_for_fill': False, 'entry_oid': 210816508019, 'notional_usd': 7146.25}
+
+Sharpe Ratio: 0.049

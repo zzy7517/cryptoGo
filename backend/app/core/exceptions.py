@@ -1,5 +1,7 @@
 """
 自定义异常类
+定义应用中使用的各类自定义异常，提供结构化的错误处理
+创建时间: 2025-10-27
 """
 from typing import Optional, Dict, Any
 
@@ -77,6 +79,15 @@ class ConfigurationException(CryptoGoException):
     配置异常
     
     当配置错误或缺少必要配置时抛出
+    """
+    pass
+
+
+class BusinessException(CryptoGoException):
+    """
+    业务逻辑异常
+    
+    当业务逻辑验证失败时抛出（如会话状态错误、操作冲突等）
     """
     pass
 

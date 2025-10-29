@@ -1,5 +1,7 @@
 """
 日志配置模块 - 基于 Loguru
+配置结构化日志系统，支持文件轮转、JSON 格式和多级别日志
+创建时间: 2025-10-27
 """
 import sys
 import logging

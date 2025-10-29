@@ -5,7 +5,6 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import logging
-import sys
 
 from app.core.config import settings
 from app.core.logging import setup_logging, InterceptHandler
@@ -16,7 +15,7 @@ from app.core.exceptions import (
     RateLimitException,
     ValidationException
 )
-from app.api.v1 import market
+from app.api.v1 import market, session, agent
 
 # 初始化 Loguru 日志系统
 logger = setup_logging()
@@ -176,6 +175,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # 注册路由
 app.include_router(market.router, prefix="/api/v1")
+app.include_router(session.router, prefix="/api/v1")
+app.include_router(agent.router, prefix="/api/v1")
 
 
 @app.get("/")
@@ -208,6 +209,14 @@ async def startup_event():
     logger.info(f"📈 默认交易对: {settings.DEFAULT_SYMBOL}")
     logger.info(f"🌐 CORS 允许的源: {settings.CORS_ORIGINS}")
     
+    # 初始化数据库
+    try:
+        from app.core.database import init_db
+        init_db()
+        logger.info("✅ 数据库初始化成功")
+    except Exception as e:
+        logger.warning(f"⚠️ 数据库初始化失败: {str(e)}")
+    
     # 测试交易所连接
     try:
         from app.services.data_collector import get_exchange_connector
@@ -221,6 +230,24 @@ async def startup_event():
 async def shutdown_event():
     """应用关闭事件"""
     logger.info(f"👋 {settings.APP_NAME} 正在关闭...")
+    
+    # 停止所有运行中的 Agent
+    try:
+        from app.services.trading_agent_service import get_agent_service
+        agent_service = get_agent_service()
+        running_agents = agent_service.list_running_agents()
+        
+        for agent_status in running_agents:
+            session_id = agent_status['session_id']
+            logger.info(f"停止 Agent (Session {session_id})...")
+            try:
+                agent_service.stop_agent(session_id)
+            except Exception as e:
+                logger.error(f"停止 Agent 失败: {str(e)}")
+        
+        logger.info("所有 Agent 已停止")
+    except Exception as e:
+        logger.error(f"关闭 Agent 失败: {str(e)}")
 
 
 if __name__ == "__main__":

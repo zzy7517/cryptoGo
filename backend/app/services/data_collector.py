@@ -1,5 +1,7 @@
 """
 数据采集服务 - 交易所连接和数据获取
+通过 CCXT 库连接交易所，获取市场数据、K 线、资金费率等信息
+创建时间: 2025-10-27
 """
 import ccxt
 from typing import List, Dict, Optional, Any

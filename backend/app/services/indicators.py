@@ -1,5 +1,7 @@
 """
 技术指标计算服务
+基于 pandas_ta 库计算各类技术指标，包括 EMA、MACD、RSI、ATR 等
+创建时间: 2025-10-27
 """
 import pandas as pd
 import pandas_ta as ta
@@ -300,4 +302,28 @@ def get_indicators_calculator() -> TechnicalIndicators:
     使用 lru_cache 确保只创建一个实例，线程安全
     """
     return TechnicalIndicators()
+
+
+def calculate_indicators(klines: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    计算所有技术指标的辅助函数
+    
+    Args:
+        klines: K线数据列表
+        
+    Returns:
+        包含所有指标和最新值的字典
+    """
+    calculator = get_indicators_calculator()
+    
+    # 计算所有指标
+    all_indicators = calculator.calculate_all_indicators(klines)
+    
+    # 获取最新值
+    latest_values = calculator.get_latest_values(klines)
+    
+    return {
+        'all_indicators': all_indicators,
+        'latest_values': latest_values
+    }
 

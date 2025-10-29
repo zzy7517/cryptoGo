@@ -7,9 +7,13 @@ numpy>=1.26.0
 python-dotenv>=1.0.0
 sqlalchemy>=2.0.30
 asyncpg>=0.29.0
-redis>=5.0.0
-apscheduler>=3.10.4
+psycopg2-binary>=2.9.9
+alembic>=1.13.0
 pydantic>=2.9.0
 pydantic-settings>=2.5.0
 loguru>=0.7.0
+openai>=1.0.0
+langgraph>=0.2.0
+langchain>=0.1.0
+langchain-openai>=0.0.5
 

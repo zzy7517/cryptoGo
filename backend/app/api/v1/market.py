@@ -1,5 +1,7 @@
 """
 市场数据 API 路由
+提供加密货币市场数据相关的 RESTful API 端点，包括 K 线、行情、指标等
+创建时间: 2025-10-27
 """
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional

@@ -16,4 +16,5 @@ build/
 .coverage
 htmlcov/
 *.egg-info/
-
+*.zip
+*.log

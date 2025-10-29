@@ -1,334 +1,166 @@
-# cryptoGo - 开发计划
+# cryptoGo - 开发任务清单
 
-基于大语言模型的智能加密货币交易系统
-
----
-
-## 🏗️ 技术栈
-
-**后端**: Python 3.11+ | FastAPI | CCXT | PostgreSQL | Redis  
-**前端**: Next.js 14 | TypeScript | TailwindCSS | Lightweight Charts  
-**AI**: LLM待定（可选GPT-4/Claude/本地模型）| LangChain（二期）
-
----
-
-## 📁 项目结构
-
-```
-cryptoGo/
-├── backend/
-│   ├── app/
-│   │   ├── main.py
-│   │   ├── api/v1/         # API路由
-│   │   ├── services/       # 业务逻辑（data_collector, ai_engine, trading_service）
-│   │   ├── models/         # 数据库模型
-│   │   ├── schemas/        # Pydantic schemas
-│   │   └── utils/          # 工具函数
-│   ├── requirements.txt
-│   └── .env.example
-│
-├── frontend/
-│   ├── src/
-│   │   ├── app/            # Next.js页面
-│   │   ├── components/     # React组件
-│   │   ├── lib/            # 工具库
-│   │   └── stores/         # Zustand状态管理
-│   └── package.json
-│
-└── docker-compose.yml
-```
-
----
-
-## 🎯 一期开发（MVP）
-
-### 当前目标：CCXT数据 + K线图
-
-**验收**: 能在前端看到BTC/USDT实时K线图，可切换时间周期
-
----
+## ✅ 已完成
 
 ### Phase 1: 环境搭建
-
 - [x] 创建项目结构
-- [ ] Git仓库初始化
-  ```bash
-  git init
-  git add .
-  git commit -m "Initial commit"
-  ```
-- [ ] 创建 `.gitignore`
-  ```
-  __pycache__/
-  *.pyc
-  .env
-  venv/
-  node_modules/
-  .next/
-  ```
-- [ ] 后端 `requirements.txt`
-  ```
-  fastapi==0.104.1
-  uvicorn[standard]==0.24.0
-  ccxt==4.1.0
-  pandas==2.1.0
-  python-dotenv==1.0.0
-  sqlalchemy==2.0.0
-  asyncpg==0.29.0
-  redis==5.0.0
-  apscheduler==3.10.4
-  ```
-- [ ] 前端 Next.js项目
-  ```bash
-  npx create-next-app@latest frontend --typescript --tailwind --app
-  cd frontend
-  npm install lightweight-charts axios @tanstack/react-query zustand
-  ```
+- [x] 后端 requirements.txt
+- [x] 前端 Next.js 项目及依赖
+- [x] Git 仓库初始化和首次提交
+- [x] 创建完整的 .gitignore 文件
 
-### Phase 2: CCXT数据采集 ✅
-
-**2.1 环境配置**
-- [x] 创建 `backend/.env`
-  ```bash
-  # 交易所配置
-  EXCHANGE=binance
-  BINANCE_API_KEY=your_api_key_here
-  BINANCE_SECRET=your_secret_here
-  BINANCE_TESTNET=true  # 使用测试网
-  
-  # 默认交易对
-  DEFAULT_SYMBOL=BTC/USDT
-  ```
-
-**2.2 交易所连接**
-- [x] 创建 `backend/app/services/data_collector.py`
+### Phase 2: CCXT数据采集
+- [x] 创建 backend/.env 配置
 - [x] 实现 ExchangeConnector 类（币安）
-- [x] 测试连接
-
-**2.3 K线数据获取**
 - [x] 获取历史K线（支持 1m/5m/15m/1h/4h/1d）
 - [x] 获取实时价格 ticker
+- [x] 获取交易对列表
+- [x] 获取资金费率（合约）
+- [x] 获取持仓量（合约）
 - [x] 数据标准化（OHLCV格式）
+- [x] 创建 backend/app/api/v1/market.py
+- [x] 实现 /api/v1/market/klines 接口
+- [x] 实现 /api/v1/market/ticker 接口
+- [x] 实现 /api/v1/market/symbols 接口
+- [x] 实现 /api/v1/market/funding-rate 接口
+- [x] 实现 /api/v1/market/open-interest 接口
+- [x] 实现 /api/v1/market/indicators 接口
+- [x] 创建 backend/app/main.py（CORS、路由、异常处理）
+- [x] 创建 backend/app/core/config.py
+- [x] 创建 Pydantic schemas
 
-**2.4 后端API**
-- [x] 创建 `backend/app/api/v1/market.py`
-- [x] `GET /api/v1/market/klines?symbol=BTC/USDT&interval=1h&limit=100`
-- [x] `GET /api/v1/market/ticker` - 实时价格
-- [x] `GET /api/v1/market/symbols` - 交易对列表
-- [x] `GET /api/v1/market/stats` - 24h统计
-
-**2.5 FastAPI基础**
-- [x] 创建 `backend/app/main.py`（CORS、路由注册、异常处理）
-- [x] 创建 `backend/app/core/config.py`（环境变量）
-- [x] 创建 Pydantic schemas（KlineResponse, TickerResponse）
-
-### Phase 3: 前端K线图 ✅
-
-**3.1 环境配置**
-- [x] 创建 `frontend/.env.local`
-  ```bash
-  NEXT_PUBLIC_API_URL=http://localhost:9527
-  NEXT_PUBLIC_WS_URL=ws://localhost:9527/ws
-  ```
-
-**3.2 K线图组件**
-- [x] 创建 `CandlestickChart.tsx`（Lightweight Charts）
+### Phase 3: 前端K线图
+- [x] 创建 frontend/.env.local
+- [x] 创建 CandlestickChart.tsx（Lightweight Charts）
 - [x] 蜡烛图 + 成交量柱状图
-- [x] 实时K线更新（支持追加数据）
-- [x] 当前价格线（十字线）
-- [x] 缩放、拖拽、响应式
-
-**3.3 状态管理**
-- [x] Market Store（Zustand）：klineData, currentSymbol, currentInterval
-- [x] React Query：自动刷新、错误处理
-
-**3.4 交易页面**
-- [x] 创建 `frontend/src/app/trading/page.tsx`
+- [x] 实时K线更新
+- [x] 十字线、缩放、拖拽、响应式
+- [x] Market Store（Zustand）状态管理
+- [x] React Query 数据获取和缓存
+- [x] 创建交易终端页面 /trading
 - [x] 交易对选择 + 时间周期切换
-- [x] 实时K线图展示
-- [x] 实时价格显示（大字体，醒目）
-- [x] 24h涨跌幅（百分比 + 绝对值）
-- [x] 实时成交量
-- [x] 最高价/最低价（24h）
+- [x] 实时价格显示
+- [x] 24h涨跌幅显示
+- [x] 24h最高价/最低价/成交量
+- [x] 定时轮询更新（30秒K线，5秒价格）
+- [x] 价格变化动画（涨绿跌红）
+- [x] 技术指标计算（EMA、MACD、RSI、ATR）
+- [x] 技术指标展示组件
+- [x] 合约数据展示组件
 
-**3.5 实时数据更新** ✅
-- [x] 定时轮询（30秒）更新K线数据
-- [x] 实时追加最新K线（不刷新整个图表）
-- [x] 当前价格线实时移动
-- [x] 价格闪烁动画（涨绿跌红）
-- [x] 最新成交量实时更新
-- [ ] WebSocket推送（可选，后续优化）
+---
 
-### Phase 4: 简单AI决策（待定）
+## 📋 待完成
 
-**4.1 LLM配置**
-- [ ] 更新 `backend/.env`（根据选择的LLM）
-  ```bash
-  # AI配置 (选择一种)
-  
-  # 选项1: OpenAI
-  # OPENAI_API_KEY=sk-xxx
-  # OPENAI_MODEL=gpt-4-turbo
-  
-  # 选项2: Anthropic Claude
-  # ANTHROPIC_API_KEY=sk-ant-xxx
-  # ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
-  
-  # 选项3: 本地模型 (Ollama)
-  # OLLAMA_BASE_URL=http://localhost:11434
-  # OLLAMA_MODEL=llama2
-  
-  # 交易参数
-  MAX_POSITION_SIZE=1000
-  MAX_DAILY_TRADES=10
-  RISK_PER_TRADE=0.02
-  ```
+### Phase 3: 前端优化（可选）
+- [ ] WebSocket 替代 HTTP 轮询
 
-**4.2 AI集成**
-- [ ] LLM API配置（待选择：GPT-4/Claude/本地模型）
-- [ ] 基础Prompt模板
-- [ ] 结构化输出解析
-
-**4.3 分析功能**
-- [ ] 技术指标计算（MA, RSI, MACD）
-- [ ] K线数据文本化（OHLCV数据 + 技术指标）
-- [ ] LLM分析市场数据
-- [ ] 生成交易信号（BUY/SELL/HOLD + 置信度 + 止损止盈）
-
-**4.4 决策记录**
-- [ ] 保存AI决策到内存或临时存储
-- [ ] API查询历史决策
-- [ ] 前端展示AI决策
-
-**4.5 市场数据输入格式示例**
-```
-当前指标:
-- Price: 113472.5
-- EMA20: 113505.722
-- MACD: -64.346
-- RSI(7): 50.147
-
-持仓数据:
-- Open Interest: 29869.61 (均值: 29844.27)
-- Funding Rate: 1.25e-05
-
-分钟级时序数据 (最近10分钟):
-- Mid Prices: [113554.5, 113574.5, 113543.5, 113418.0, 113354.5, 113401.5, 113428.0, 113474.0, 113387.0, 113472.5]
-- EMA20: [113615.674, 113610.277, 113602.631, 113578.857, 113559.252, 113543.228, 113532.444, 113526.973, 113509.166, 113505.722]
-- MACD: [-30.059, -31.082, -33.842, -49.739, -60.031, -65.975, -66.769, -63.04, -70.17, -64.346]
-- RSI(7): [39.841, 44.766, 41.299, 26.62, 29.904, 33.051, 39.873, 47.126, 33.136, 50.147]
-- RSI(14): [43.609, 46.15, 44.262, 34.885, 36.521, 38.031, 41.289, 44.889, 37.466, 46.799]
-
-4小时级别背景:
-- EMA20: 111283.106 vs EMA50: 110627.658
-- ATR(3): 653.296 vs ATR(14): 685.181
-- Volume: 8.04 vs Avg Volume: 4789.257
-- MACD: [490.958, 552.679, 598.567, 613.498, 638.946, 650.006, 620.233, 631.799, 761.455, 879.887]
-- RSI(14): [57.967, 60.329, 60.572, 59.128, 60.605, 60.424, 56.868, 60.273, 68.443, 69.78]
-```
-
-> 注：LLM选型待定，可根据需求选择不同模型
+### Phase 4: AI决策引擎
+- [x] 选择 LLM 方案（DeepSeek）
+- [x] 更新 backend/.env 添加 AI 配置
+- [x] 创建 backend/app/services/ai_engine.py
+- [x] 实现 LLM API 集成（DeepSeek）
+- [x] 设计市场分析 Prompt 模板
+- [x] K线数据文本化（格式化为 LLM 输入）
+- [x] 生成交易信号（BUY/SELL/HOLD + 置信度 + 理由）
+- [x] 保存 AI 决策到数据库（已集成）
+- [x] 实现市场数据格式化和分析功能
+- [ ] 优化结构化输出解析（JSON格式交易信号）
+- [ ] 创建 AI 决策 API 接口
+  - [ ] POST /api/v1/ai/analyze - 分析市场
+  - [ ] GET /api/v1/ai/decisions - 查询历史决策
+- [ ] 前端创建 AI 决策展示组件
+- [ ] 前端集成 AI 决策面板
 
 ### Phase 5: 交易执行
+- [ ] 实现订单创建（市价/限价）
+- [ ] 实现订单取消
+- [ ] 实现订单状态追踪
+- [ ] 实现余额检查
+- [ ] 实现单笔限额风控
+- [ ] 实现日交易次数限制
+- [ ] 实现手动确认模式
+- [ ] 实现模拟交易（Paper Trading）
+- [ ] 前端订单管理界面
 
-**5.1 订单管理**
-- [ ] 创建订单（市价/限价）
-- [ ] 取消订单
-- [ ] 订单状态追踪
-
-**5.2 风控**
-- [ ] 余额检查
-- [ ] 单笔限额
-- [ ] 日交易次数限制
-
-**5.3 交易模式**
-- [ ] 手动确认模式
-- [ ] 模拟交易（Paper Trading）
-
-### Phase 6: 数据持久化（交易记录）
-
-**6.1 数据库配置**
-- [ ] 更新 `backend/.env`
-  ```bash
-  # 数据库配置
-  DATABASE_URL=postgresql://postgres:password@localhost:5432/cryptogo
-  REDIS_URL=redis://localhost:6379/0
-  ```
-- [ ] 本地安装PostgreSQL和Redis（或使用Docker）
-
-**6.2 数据库设计**
-- [ ] PostgreSQL Schema（主要用于交易记录：orders, positions, ai_decisions）
-- [ ] Alembic迁移脚本
-- [ ] 交易记录入库
-- [ ] 数据查询优化（索引）
+### Phase 6: 数据持久化
+- [x] 配置 Supabase PostgreSQL
+- [x] 更新 backend/.env 添加数据库配置
+- [x] 设计数据库 Schema（positions, ai_decisions, account_snapshots, trades）
+- [x] 创建数据库连接管理（database.py）
+- [x] 创建数据库模型（SQLAlchemy）
+  - [x] Position 模型（持仓）
+  - [x] AIDecision 模型（AI 决策）
+  - [x] AccountSnapshot 模型（账户快照）
+  - [x] Trade 模型（交易记录）
+- [x] 创建数据访问层（Repository Pattern）
+  - [x] PositionRepository（持仓管理）
+  - [x] AIDecisionRepository（决策管理）
+  - [x] AccountSnapshotRepository（账户快照管理）
+- [x] 实现 AI 决策记录入库
+- [x] 创建数据库索引优化查询
+- [x] 集成 AI 引擎自动保存决策
+- [ ] 实现交易记录 Repository
+- [ ] 配置 Alembic 数据库迁移（可选）
+- [ ] 创建数据库初始化脚本
 
 ### Phase 7: 定时任务
-
-- [ ] APScheduler配置
-- [ ] 定时采集K线（5分钟）
-- [ ] 账户数据同步（1分钟）
+- [ ] 配置 APScheduler
+- [ ] 实现定时采集K线（5分钟）
+- [ ] 实现账户数据同步（1分钟）
 
 ### Phase 8: 前端完善
+- [ ] 创建 Dashboard 页面（资产、持仓）
+- [ ] 创建 History 页面（交易历史、AI 决策历史）
+- [ ] 实现 Header/Sidebar 布局
+- [ ] 集成 shadcn/ui 组件库
 
-- [ ] Dashboard页面（资产、持仓、AI决策）
-- [ ] History页面（交易历史、AI决策历史）
-- [ ] Header/Sidebar布局
-- [ ] shadcn/ui组件
-
-### Phase 9: Docker环境（可选）
-
+### Phase 9: Docker 环境
 - [ ] 创建 docker-compose.yml
-- [ ] PostgreSQL容器配置
-- [ ] Redis容器配置
-- [ ] 后端服务容器化（可选）
-- [ ] 前端服务容器化（可选）
-- [ ] Docker Compose本地部署
-
-> 注：本地开发可直接用本机数据库，Docker可后续再配置
+- [ ] 配置 PostgreSQL 容器
+- [ ] 配置 Redis 容器
+- [ ] 后端服务 Dockerfile
+- [ ] 前端服务 Dockerfile
+- [ ] Docker Compose 本地部署测试
 
 ### Phase 10: 测试部署
-
 - [ ] 功能测试（数据采集、AI分析、交易）
-- [ ] 测试网验证
+- [ ] 币安测试网验证
 
 ---
 
 ## 🚀 二期开发
 
-### Phase 11: 多智能体系统 ⭐（二期 - 需先确定LLM）
-
-- [ ] 确定LLM选型和API
-- [ ] LangChain Agent框架集成
-- [ ] AnalystAgent（技术分析）
-- [ ] SentimentAgent（新闻/社交媒体情绪）
-- [ ] TraderAgent（综合决策）
-- [ ] RiskAgent（风险管理）
-- [ ] Multi-Agent协作机制
+### Phase 11: 多智能体系统
+- [ ] 确定 LLM 选型和 API
+- [ ] LangChain Agent 框架集成
+- [ ] 实现 AnalystAgent（技术分析）
+- [ ] 实现 SentimentAgent（情绪分析）
+- [ ] 实现 TraderAgent（综合决策）
+- [ ] 实现 RiskAgent（风险管理）
+- [ ] 实现 Multi-Agent 协作机制
 
 ### Phase 12: 高级功能
-
 - [ ] 自动交易模式
 - [ ] 多币种支持
 - [ ] 策略回测系统
 - [ ] 网格交易
-- [ ] TimescaleDB升级
-- [ ] **WebSocket实时推送优化** ⭐
-  - [ ] 后端：实现 WebSocket 端点（`/ws/ticker/{symbol}` 和 `/ws/kline/{symbol}/{interval}`）
-  - [ ] 后端：添加 ConnectionManager 管理连接、实现广播机制
-  - [ ] 前端：创建 useWebSocket hooks 替换 HTTP 轮询
-  - [ ] 前端：实现断线重连和降级机制
-  - [ ] 混合架构：WebSocket 用于实时数据（1秒级），HTTP REST 保留用于历史数据
-  - [ ] 参考 Binance API 架构，预期效果：延迟从5秒降至1秒内，带宽节省70-90%
-- [ ] Celery任务队列
+- [ ] TimescaleDB 升级
+- [ ] WebSocket 实时推送
+  - [ ] 后端 WebSocket 端点
+  - [ ] 后端 ConnectionManager
+  - [ ] 前端 useWebSocket hooks
+  - [ ] 断线重连机制
+  - [ ] 混合架构（WS + HTTP）
+- [ ] Celery 任务队列
 
 ### Phase 13: 生产优化
-
 - [ ] 性能优化（数据库、Redis、CDN）
-- [ ] 安全加固（API加密、签名验证、XSS/CSRF）
+- [ ] 安全加固（API 加密、签名验证）
 - [ ] 高可用（主从复制、负载均衡）
 - [ ] 监控告警（Prometheus、Grafana、Sentry）
-- [ ] 完整文档
+- [ ] 编写完整文档
 
 ---
 
-**最后更新**: 2025-10-27
+**最后更新**: 2025-10-28
