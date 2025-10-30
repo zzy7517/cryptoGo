@@ -1,25 +1,77 @@
 """
 Trading Agent 测试脚本
-测试 LangGraph Agent 的基本功能
+测试基于 DeepSeek Function Calling 的 Agent（支持后台挂机）
 创建时间: 2025-10-29
 """
 import asyncio
 import time
-from app.core.database import get_db
+from app.utils.database import get_db
 from app.repositories.trading_session_repo import TradingSessionRepository
-from app.services.trading_agent_service import get_agent_service
-from app.core.logging import get_logger
+from app.services.trading_agent_service import run_trading_agent, get_background_agent_manager
+from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-def test_agent_lifecycle():
-    """
-    测试 Agent 生命周期：启动、运行、停止
-    """
-    print("\n=== 测试 Agent 生命周期 ===\n")
+async def test_agent_once():
+    """测试单次运行 Agent"""
+    print("\n" + "="*60)
+    print("测试 1: 单次运行 Agent")
+    print("="*60 + "\n")
     
-    # 1. 创建测试会话
+    # 使用测试会话 ID
+    test_session_id = 999999
+    
+    print("运行 Agent...")
+    result = await run_trading_agent(
+        session_id=test_session_id,
+        symbols=["BTC/USDT:USDT"],
+        risk_params={
+            "max_position_size": 0.2,
+            "stop_loss_pct": 0.05,
+            "take_profit_pct": 0.10,
+            "max_leverage": 3,
+            "max_positions": 3
+        },
+        max_iterations=10,
+        model="deepseek-chat"
+    )
+    
+    print("\n" + "="*60)
+    print("决策结果:")
+    print("="*60)
+    print(f"成功: {result['success']}")
+    print(f"迭代次数: {result['iterations']}")
+    print(f"使用的工具: {len(result.get('tools_used', []))} 个")
+    
+    if result.get('tools_used'):
+        print("\n工具调用:")
+        for i, tool in enumerate(result['tools_used'], 1):
+            print(f"  {i}. {tool['name']}")
+    
+    if result.get('decision'):
+        print("\n" + "="*60)
+        print("AI 决策:")
+        print("="*60)
+        # 只显示前500字符
+        decision = result['decision']
+        print(decision[:500] + "..." if len(decision) > 500 else decision)
+    
+    if result.get('error'):
+        print(f"\n❌ 错误: {result['error']}")
+    
+    print("\n" + "="*60)
+    print("测试完成")
+    print("="*60 + "\n")
+
+
+def test_background_agent():
+    """测试后台挂机 Agent"""
+    print("\n" + "="*60)
+    print("测试 2: 后台挂机 Agent")
+    print("="*60 + "\n")
+    
+    # 创建测试会话
     db = next(get_db())
     try:
         session_repo = TradingSessionRepository(db)
@@ -31,163 +83,128 @@ def test_agent_lifecycle():
             # 创建新会话
             print("创建测试会话...")
             session = session_repo.create_session(
-                session_name="Agent Test Session",
+                session_name="Background Agent Test",
                 initial_capital=10000.0,
-                config={
-                    "test": True,
-                    "decision_interval": 30
-                }
+                config={"test": True}
             )
             print(f"✅ 会话已创建: {session.id}")
         else:
             session = active_session
-            print(f"✅ 使用现有活跃会话: {session.id}")
+            print(f"✅ 使用现有会话: {session.id}")
         
         session_id = session.id
         
     finally:
         db.close()
     
-    # 2. 启动 Agent
-    print("\n启动 Agent...")
-    agent_service = get_agent_service()
+    # 启动后台 Agent
+    print("\n启动后台 Agent...")
+    manager = get_background_agent_manager()
     
     try:
-        result = agent_service.start_agent(
+        result = manager.start_background_agent(
             session_id=session_id,
-            decision_interval=30,  # 30秒一次循环（快速测试）
             symbols=["BTC/USDT:USDT"],
-            initial_capital=10000.0
+            risk_params={
+                "max_position_size": 0.2,
+                "stop_loss_pct": 0.05,
+                "take_profit_pct": 0.10,
+                "max_leverage": 3,
+                "max_positions": 3
+            },
+            decision_interval=30,  # 30秒一次（快速测试）
+            model="deepseek-chat",
+            max_iterations=10
         )
-        print(f"✅ Agent 已启动: {result}")
+        print(f"✅ 后台 Agent 已启动: {result}")
     except ValueError as e:
         print(f"⚠️ Agent 已在运行: {e}")
     
-    # 3. 监控 Agent 运行
-    print("\n监控 Agent 运行 (60秒)...")
+    # 监控运行
+    print("\n监控后台 Agent (60秒)...")
     for i in range(6):
         time.sleep(10)
-        status = agent_service.get_agent_status(session_id)
+        status = manager.get_agent_status(session_id)
         
         if status:
-            print(f"  [{i*10}s] 状态: {status['status']}, 循环: {status['loop_count']}, "
-                  f"节点: {status['current_node']}, 错误: {status['error_count']}")
+            print(f"  [{i*10}s] 状态: {status['status']}, "
+                  f"运行次数: {status['run_count']}, "
+                  f"最后运行: {status['last_run_time'] or '未运行'}")
         else:
             print(f"  [{i*10}s] Agent 未运行")
             break
     
-    # 4. 停止 Agent
-    print("\n停止 Agent...")
+    # 停止 Agent
+    print("\n停止后台 Agent...")
     try:
-        result = agent_service.stop_agent(session_id)
+        result = manager.stop_background_agent(session_id)
         print(f"✅ Agent 已停止: {result}")
     except ValueError as e:
         print(f"⚠️ {e}")
     
-    # 5. 验证 Agent 已停止
+    # 验证已停止
     time.sleep(2)
-    status = agent_service.get_agent_status(session_id)
+    status = manager.get_agent_status(session_id)
     if status is None:
         print("✅ Agent 状态已清除")
     else:
         print(f"⚠️ Agent 状态仍存在: {status['status']}")
     
-    print("\n=== 测试完成 ===\n")
+    print("\n" + "="*60)
+    print("测试完成")
+    print("="*60 + "\n")
 
 
-def test_agent_status():
-    """
-    测试 Agent 状态查询
-    """
-    print("\n=== 测试 Agent 状态查询 ===\n")
+def test_list_agents():
+    """测试列出所有 Agent"""
+    print("\n" + "="*60)
+    print("测试 3: 列出所有运行的 Agent")
+    print("="*60 + "\n")
     
-    agent_service = get_agent_service()
+    manager = get_background_agent_manager()
+    agents = manager.list_agents()
     
-    # 列出所有运行中的 Agent
-    running_agents = agent_service.list_running_agents()
-    print(f"运行中的 Agent 数量: {len(running_agents)}")
+    print(f"运行中的 Agent 数量: {len(agents)}")
     
-    for agent in running_agents:
-        print(f"  - Session {agent['session_id']}: {agent['status']}, "
-              f"循环 {agent['loop_count']} 次")
+    for agent in agents:
+        if agent:
+            print(f"\n  Session {agent['session_id']}:")
+            print(f"    状态: {agent['status']}")
+            print(f"    运行次数: {agent['run_count']}")
+            print(f"    配置: {agent['config']['symbols']}")
     
-    print("\n=== 测试完成 ===\n")
-
-
-def test_agent_config_update():
-    """
-    测试 Agent 配置更新
-    """
-    print("\n=== 测试 Agent 配置更新 ===\n")
-    
-    # 获取活跃会话
-    db = next(get_db())
-    try:
-        session_repo = TradingSessionRepository(db)
-        active_session = session_repo.get_active_session()
-        
-        if not active_session:
-            print("⚠️ 没有活跃会话，跳过测试")
-            return
-        
-        session_id = active_session.id
-    finally:
-        db.close()
-    
-    agent_service = get_agent_service()
-    
-    # 检查 Agent 是否运行
-    status = agent_service.get_agent_status(session_id)
-    if not status:
-        print(f"⚠️ Session {session_id} 的 Agent 未运行，跳过测试")
-        return
-    
-    print(f"当前配置: 间隔={status['decision_interval']}秒, 币种={status['symbols']}")
-    
-    # 更新配置
-    print("\n更新配置...")
-    try:
-        result = agent_service.update_config(
-            session_id=session_id,
-            decision_interval=60,
-            symbols=["BTC/USDT:USDT", "ETH/USDT:USDT"]
-        )
-        print(f"✅ 配置已更新: {result}")
-    except Exception as e:
-        print(f"❌ 更新失败: {e}")
-    
-    # 验证更新
-    time.sleep(1)
-    status = agent_service.get_agent_status(session_id)
-    print(f"新配置: 间隔={status['decision_interval']}秒, 币种={status['symbols']}")
-    
-    print("\n=== 测试完成 ===\n")
+    print("\n" + "="*60)
+    print("测试完成")
+    print("="*60 + "\n")
 
 
 if __name__ == "__main__":
     import sys
     
-    print("\n" + "="*50)
+    print("\n" + "="*60)
     print("CryptoGo Trading Agent 测试")
-    print("="*50)
+    print("基于 DeepSeek Function Calling + 后台挂机")
+    print("="*60)
     
     if len(sys.argv) > 1:
         test_name = sys.argv[1]
         
-        if test_name == "lifecycle":
-            test_agent_lifecycle()
-        elif test_name == "status":
-            test_agent_status()
-        elif test_name == "config":
-            test_agent_config_update()
+        if test_name == "once":
+            asyncio.run(test_agent_once())
+        elif test_name == "background":
+            test_background_agent()
+        elif test_name == "list":
+            test_list_agents()
         else:
-            print(f"未知测试: {test_name}")
-            print("可用测试: lifecycle, status, config")
+            print(f"\n未知测试: {test_name}")
+            print("\n可用测试:")
+            print("  once       - 单次运行 Agent")
+            print("  background - 后台挂机 Agent")
+            print("  list       - 列出运行的 Agent")
     else:
-        print("使用方法:")
-        print("  python test_agent.py lifecycle  # 测试生命周期")
-        print("  python test_agent.py status     # 测试状态查询")
-        print("  python test_agent.py config     # 测试配置更新")
-        print("\n运行默认测试 (lifecycle)...\n")
-        test_agent_lifecycle()
-
+        print("\n使用方法:")
+        print("  python test_agent.py once       # 单次运行")
+        print("  python test_agent.py background # 后台挂机")
+        print("  python test_agent.py list       # 列出 Agent")
+        print("\n运行默认测试 (once)...\n")
+        asyncio.run(test_agent_once())

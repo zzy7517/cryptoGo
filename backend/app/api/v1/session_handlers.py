@@ -1,24 +1,21 @@
 """
-交易会话 API 路由
-提供会话管理相关的 RESTful API 端点
+交易会话处理函数
+所有会话相关的业务逻辑处理
 创建时间: 2025-10-29
 """
-from fastapi import APIRouter, HTTPException, Depends, Query, Body
+from fastapi import HTTPException, Depends, Query, Body
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.utils.database import get_db
 from app.services.trading_session_service import TradingSessionService
-from app.services.trading_agent_service import get_agent_service
-from app.core.logging import get_logger
-from app.core.exceptions import BusinessException
+from app.services.trading_agent_service import get_background_agent_manager
+from app.utils.logging import get_logger
+from app.utils.exceptions import BusinessException
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/session", tags=["session"])
 
-
-@router.post("/start")
 async def start_session(
     session_name: Optional[str] = Body(None, description="会话名称"),
     initial_capital: Optional[float] = Body(None, description="初始资金"),
@@ -56,7 +53,6 @@ async def start_session(
         raise HTTPException(status_code=500, detail=f"开始会话失败: {str(e)}")
 
 
-@router.post("/end")
 async def end_session(
     session_id: Optional[int] = Body(None, description="会话 ID，不提供则结束当前活跃会话"),
     status: str = Body("completed", description="结束状态: completed, stopped, crashed"),
@@ -78,12 +74,12 @@ async def end_session(
         )
         
         # 自动停止该会话的 Agent（如果正在运行）
-        agent_service = get_agent_service()
-        agent_status = agent_service.get_agent_status(session.id)
+        manager = get_background_agent_manager()
+        agent_status = manager.get_agent_status(session.id)
         
         if agent_status:
             try:
-                agent_service.stop_agent(session.id)
+                manager.stop_background_agent(session.id)
                 logger.info(f"已自动停止会话 {session.id} 的 Agent")
             except Exception as e:
                 logger.warning(f"停止 Agent 失败: {str(e)}")
@@ -108,7 +104,6 @@ async def end_session(
         raise HTTPException(status_code=500, detail=f"结束会话失败: {str(e)}")
 
 
-@router.get("/active")
 async def get_active_session(db: Session = Depends(get_db)):
     """
     获取当前活跃的交易会话
@@ -127,8 +122,8 @@ async def get_active_session(db: Session = Depends(get_db)):
             }
         
         # 获取 Agent 状态
-        agent_service = get_agent_service()
-        agent_status = agent_service.get_agent_status(session.id)
+        manager = get_background_agent_manager()
+        agent_status = manager.get_agent_status(session.id)
         
         return {
             "success": True,
@@ -147,7 +142,6 @@ async def get_active_session(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"获取活跃会话失败: {str(e)}")
 
 
-@router.get("/list")
 async def get_session_list(
     status: Optional[str] = Query(None, description="过滤状态: running, completed, stopped, crashed"),
     limit: int = Query(20, ge=1, le=100, description="返回数量"),
@@ -172,7 +166,6 @@ async def get_session_list(
         raise HTTPException(status_code=500, detail=f"获取会话列表失败: {str(e)}")
 
 
-@router.get("/{session_id}")
 async def get_session_details(
     session_id: int,
     db: Session = Depends(get_db)
@@ -197,7 +190,6 @@ async def get_session_details(
         raise HTTPException(status_code=500, detail=f"获取会话详情失败: {str(e)}")
 
 
-@router.post("/{session_id}/snapshot")
 async def create_snapshot(
     session_id: int,
     total_value: float = Body(..., description="账户总价值"),

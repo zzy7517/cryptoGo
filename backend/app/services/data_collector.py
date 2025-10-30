@@ -4,13 +4,14 @@
 创建时间: 2025-10-27
 """
 import ccxt
+import os
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 from functools import lru_cache
 
-from app.core.config import settings
-from app.core.logging import get_logger
-from app.core.exceptions import (
+from app.utils.config import settings
+from app.utils.logging import get_logger
+from app.utils.exceptions import (
     UnsupportedFeatureException, 
     DataFetchException,
     RateLimitException,
@@ -132,12 +133,23 @@ class ExchangeConnector:
             logger.warning(error_msg, symbol=symbol, interval=interval)
             raise RateLimitException(error_msg) from e
         except ccxt.NetworkError as e:
-            error_msg = f"网络错误: {str(e)}"
-            logger.error(error_msg, symbol=symbol, interval=interval)
-            raise DataFetchException(error_msg, details={"symbol": symbol, "interval": interval}) from e
+            error_msg = f"网络错误"
+            # 记录完整的异常信息和堆栈
+            logger.exception(error_msg, symbol=symbol, interval=interval, exception_type=type(e).__name__)
+            # 尝试获取更详细的错误信息
+            if hasattr(e, 'response') and e.response:
+                logger.error(f"API 响应详情", response=str(e.response)[:500])  # 限制长度避免日志过大
+            raise DataFetchException(f"{error_msg}: {str(e)}", details={"symbol": symbol, "interval": interval}) from e
+        except ccxt.BaseError as e:
+            # CCXT 基础错误，可能包含 API 错误响应
+            error_msg = f"交易所 API 错误"
+            logger.exception(error_msg, symbol=symbol, interval=interval, exception_type=type(e).__name__)
+            if hasattr(e, 'response') and e.response:
+                logger.error(f"API 响应详情", response=str(e.response)[:500])  # 限制长度避免日志过大
+            raise DataFetchException(f"{error_msg}: {str(e)}", details={"symbol": symbol, "interval": interval}) from e
         except Exception as e:
             error_msg = f"获取K线数据失败: {str(e)}"
-            logger.exception(error_msg, symbol=symbol, interval=interval)
+            logger.exception(error_msg, symbol=symbol, interval=interval, exception_type=type(e).__name__)
             raise DataFetchException(error_msg, details={"symbol": symbol, "interval": interval}) from e
     
     def get_ticker(self, symbol: str) -> Dict[str, Any]:
@@ -180,9 +192,21 @@ class ExchangeConnector:
             error_msg = f"API 请求频率超限: {str(e)}"
             logger.warning(error_msg, symbol=symbol)
             raise RateLimitException(error_msg) from e
+        except ccxt.NetworkError as e:
+            error_msg = f"网络错误"
+            logger.exception(error_msg, symbol=symbol, exception_type=type(e).__name__)
+            if hasattr(e, 'response') and e.response:
+                logger.error(f"API 响应详情", response=str(e.response)[:500])
+            raise DataFetchException(f"{error_msg}: {str(e)}", details={"symbol": symbol}) from e
+        except ccxt.BaseError as e:
+            error_msg = f"交易所 API 错误"
+            logger.exception(error_msg, symbol=symbol, exception_type=type(e).__name__)
+            if hasattr(e, 'response') and e.response:
+                logger.error(f"API 响应详情", response=str(e.response)[:500])
+            raise DataFetchException(f"{error_msg}: {str(e)}", details={"symbol": symbol}) from e
         except Exception as e:
             error_msg = f"获取实时行情失败: {str(e)}"
-            logger.exception(error_msg, symbol=symbol)
+            logger.exception(error_msg, symbol=symbol, exception_type=type(e).__name__)
             raise DataFetchException(error_msg, details={"symbol": symbol}) from e
     
     def get_symbols(self, quote: str = 'USDT', active_only: bool = True) -> List[Dict[str, Any]]:
@@ -264,10 +288,22 @@ class ExchangeConnector:
             
         except UnsupportedFeatureException:
             raise
+        except ccxt.NetworkError as e:
+            error_msg = f"获取资金费率网络错误"
+            logger.exception(error_msg, symbol=symbol, exception_type=type(e).__name__)
+            if hasattr(e, 'response') and e.response:
+                logger.error(f"API 响应详情", response=str(e.response)[:500])
+            raise DataFetchException(f"{error_msg}: {str(e)}", details={"symbol": symbol}) from e
+        except ccxt.BaseError as e:
+            error_msg = f"获取资金费率 API 错误"
+            logger.exception(error_msg, symbol=symbol, exception_type=type(e).__name__)
+            if hasattr(e, 'response') and e.response:
+                logger.error(f"API 响应详情", response=str(e.response)[:500])
+            raise DataFetchException(f"{error_msg}: {str(e)}", details={"symbol": symbol}) from e
         except Exception as e:
-            error_msg = f"获取资金费率失败: {str(e)}"
-            logger.exception(error_msg, symbol=symbol)
-            raise DataFetchException(error_msg, details={"symbol": symbol}) from e
+            error_msg = f"获取资金费率失败"
+            logger.exception(error_msg, symbol=symbol, exception_type=type(e).__name__)
+            raise DataFetchException(f"{error_msg}: {str(e)}", details={"symbol": symbol}) from e
     
     def get_open_interest(self, symbol: str) -> Dict[str, Any]:
         """
@@ -311,10 +347,22 @@ class ExchangeConnector:
             
         except UnsupportedFeatureException:
             raise
+        except ccxt.NetworkError as e:
+            error_msg = f"获取持仓量网络错误"
+            logger.exception(error_msg, symbol=symbol, exception_type=type(e).__name__)
+            if hasattr(e, 'response') and e.response:
+                logger.error(f"API 响应详情", response=str(e.response)[:500])
+            raise DataFetchException(f"{error_msg}: {str(e)}", details={"symbol": symbol}) from e
+        except ccxt.BaseError as e:
+            error_msg = f"获取持仓量 API 错误"
+            logger.exception(error_msg, symbol=symbol, exception_type=type(e).__name__)
+            if hasattr(e, 'response') and e.response:
+                logger.error(f"API 响应详情", response=str(e.response)[:500])
+            raise DataFetchException(f"{error_msg}: {str(e)}", details={"symbol": symbol}) from e
         except Exception as e:
-            error_msg = f"获取持仓量失败: {str(e)}"
-            logger.exception(error_msg, symbol=symbol)
-            raise DataFetchException(error_msg, details={"symbol": symbol}) from e
+            error_msg = f"获取持仓量失败"
+            logger.exception(error_msg, symbol=symbol, exception_type=type(e).__name__)
+            raise DataFetchException(f"{error_msg}: {str(e)}", details={"symbol": symbol}) from e
 
 
 @lru_cache(maxsize=1)

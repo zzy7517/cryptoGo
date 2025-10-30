@@ -9,7 +9,7 @@ import numpy as np
 from typing import List, Dict, Any, Optional
 from functools import lru_cache
 
-from app.core.logging import get_logger
+from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
 

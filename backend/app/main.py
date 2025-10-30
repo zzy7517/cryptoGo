@@ -4,28 +4,20 @@ CryptoGo - FastAPI 主应用
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import logging
 
-from app.core.config import settings
-from app.core.logging import setup_logging, InterceptHandler
-from app.core.exceptions import (
+from app.utils.config import settings
+from app.utils.logging import setup_logging
+from app.utils.exceptions import (
     CryptoGoException,
     UnsupportedFeatureException, 
     DataFetchException,
     RateLimitException,
     ValidationException
 )
-from app.api.v1 import market, session, agent
+from app.api.v1.routes import api_v1_router
 
 # 初始化 Loguru 日志系统
 logger = setup_logging()
-
-# 拦截标准库 logging，转发到 Loguru
-logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
-logging.getLogger("uvicorn").handlers = [InterceptHandler()]
-logging.getLogger("uvicorn.access").handlers = [InterceptHandler()]
-logging.getLogger("uvicorn.error").handlers = [InterceptHandler()]
-logging.getLogger("fastapi").handlers = [InterceptHandler()]
 
 # 创建 FastAPI 应用
 app = FastAPI(
@@ -173,10 +165,8 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# 注册路由
-app.include_router(market.router, prefix="/api/v1")
-app.include_router(session.router, prefix="/api/v1")
-app.include_router(agent.router, prefix="/api/v1")
+# 注册集中式路由 - 所有 v1 API 路由
+app.include_router(api_v1_router)
 
 
 @app.get("/")
@@ -211,7 +201,7 @@ async def startup_event():
     
     # 初始化数据库
     try:
-        from app.core.database import init_db
+        from app.utils.database import init_db
         init_db()
         logger.info("✅ 数据库初始化成功")
     except Exception as e:
@@ -231,21 +221,22 @@ async def shutdown_event():
     """应用关闭事件"""
     logger.info(f"👋 {settings.APP_NAME} 正在关闭...")
     
-    # 停止所有运行中的 Agent
+    # 停止所有后台运行的 Agent
     try:
-        from app.services.trading_agent_service import get_agent_service
-        agent_service = get_agent_service()
-        running_agents = agent_service.list_running_agents()
+        from app.services.trading_agent_service import get_background_agent_manager
+        manager = get_background_agent_manager()
+        running_agents = manager.list_agents()
         
         for agent_status in running_agents:
-            session_id = agent_status['session_id']
-            logger.info(f"停止 Agent (Session {session_id})...")
-            try:
-                agent_service.stop_agent(session_id)
-            except Exception as e:
-                logger.error(f"停止 Agent 失败: {str(e)}")
+            if agent_status:
+                session_id = agent_status['session_id']
+                logger.info(f"停止后台 Agent (Session {session_id})...")
+                try:
+                    manager.stop_background_agent(session_id)
+                except Exception as e:
+                    logger.error(f"停止 Agent 失败: {str(e)}")
         
-        logger.info("所有 Agent 已停止")
+        logger.info("所有后台 Agent 已停止")
     except Exception as e:
         logger.error(f"关闭 Agent 失败: {str(e)}")
 

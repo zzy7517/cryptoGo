@@ -6,7 +6,7 @@
 from sqlalchemy import Column, BigInteger, String, Numeric, Integer, DateTime, Interval, Index, CheckConstraint, ForeignKey
 from sqlalchemy.sql import func
 
-from app.core.database import Base
+from app.utils.database import Base
 
 
 class Trade(Base):

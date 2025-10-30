@@ -11,7 +11,7 @@ from datetime import datetime
 
 from app.models.trade import Trade
 from app.repositories.base import BaseRepository
-from app.core.logging import get_logger
+from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -139,80 +139,6 @@ class TradeRepository(BaseRepository[Trade]):
             .order_by(desc(Trade.created_at))\
             .limit(limit)\
             .all()
-    
-    def get_by_position(
-        self,
-        position_id: int
-    ) -> List[Trade]:
-        """
-        获取指定持仓的所有交易
-        
-        Args:
-            position_id: 持仓 ID
-            
-        Returns:
-            交易记录列表
-        """
-        return self.db.query(Trade)\
-            .filter(Trade.position_id == position_id)\
-            .order_by(Trade.created_at)\
-            .all()
-    
-    def close_trade(
-        self,
-        trade_id: int,
-        exit_price: Decimal,
-        exit_time: Optional[datetime] = None
-    ) -> Optional[Trade]:
-        """
-        平仓交易（更新出场信息和盈亏）
-        
-        Args:
-            trade_id: 交易 ID
-            exit_price: 出场价格
-            exit_time: 出场时间
-            
-        Returns:
-            更新后的交易或 None
-        """
-        trade = self.get_by_id(trade_id)
-        if not trade:
-            return None
-        
-        # 计算盈亏
-        if trade.side in ['buy', 'long']:
-            pnl = (exit_price - trade.price) * trade.quantity * trade.leverage
-        else:  # sell, short
-            pnl = (trade.price - exit_price) * trade.quantity * trade.leverage
-        
-        # 减去手续费
-        if trade.fee:
-            pnl -= trade.fee
-        
-        # 计算盈亏百分比
-        pnl_pct = (pnl / trade.total_value) * 100 if trade.total_value > 0 else 0
-        
-        # 计算持仓时长
-        exit_time = exit_time or datetime.now()
-        holding_duration = exit_time - trade.entry_time if trade.entry_time else None
-        
-        updated = self.update(
-            trade_id,
-            exit_time=exit_time,
-            pnl=pnl,
-            pnl_pct=pnl_pct,
-            holding_duration=holding_duration
-        )
-        
-        if updated:
-            logger.info(
-                "交易已平仓",
-                trade_id=trade_id,
-                pnl=pnl,
-                pnl_pct=pnl_pct
-            )
-        
-        return updated
     
     def get_session_statistics(self, session_id: int) -> dict:
         """

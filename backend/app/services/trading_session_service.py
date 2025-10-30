@@ -14,8 +14,8 @@ from app.repositories.trade_repo import TradeRepository
 from app.repositories.account_snapshot_repo import AccountSnapshotRepository
 from app.repositories.ai_decision_repo import AIDecisionRepository
 from app.models.trading_session import TradingSession
-from app.core.logging import get_logger
-from app.core.exceptions import BusinessException
+from app.utils.logging import get_logger
+from app.utils.exceptions import BusinessException
 
 logger = get_logger(__name__)
 

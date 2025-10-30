@@ -7,7 +7,7 @@ from sqlalchemy import Column, BigInteger, String, Numeric, Boolean, Text, DateT
 from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 from sqlalchemy.sql import func
 
-from app.core.database import Base
+from app.utils.database import Base
 
 
 class AIDecision(Base):

@@ -4,12 +4,10 @@
 创建时间: 2025-10-27
 """
 import sys
-import logging
-import inspect
 from pathlib import Path
 from loguru import logger
 
-from app.core.config import settings
+from app.utils.config import settings
 
 def setup_logging():
     """
@@ -104,7 +102,7 @@ def get_logger(name: str = None):
         配置好的 logger 实例
         
     Example:
-        from app.core.logging import get_logger
+        from app.utils.logging import get_logger
         logger = get_logger(__name__)
         logger.info("Hello, world!")
     """
@@ -113,39 +111,7 @@ def get_logger(name: str = None):
     return logger
 
 
-# 拦截标准库 logging 的日志
-class InterceptHandler(logging.Handler):
-    """
-    拦截标准库 logging 的日志，转发到 Loguru
-    
-    用于捕获第三方库（如 uvicorn、fastapi）的日志
-    """
-    
-    def emit(self, record: logging.LogRecord) -> None:
-        """
-        处理日志记录
-        
-        将标准库 logging 的日志转发到 Loguru
-        """
-        # 获取对应的 Loguru 日志级别
-        try:
-            level = logger.level(record.levelname).name
-        except ValueError:
-            level = record.levelno
-        
-        # 查找调用者的栈帧
-        frame, depth = inspect.currentframe(), 0
-        while frame:
-            filename = frame.f_code.co_filename
-            # 跳过 logging 模块本身的栈帧
-            if filename == logging.__file__ or "importlib" in filename:
-                frame = frame.f_back
-                depth += 1
-                continue
-            break
-        
-        # 使用 Loguru 记录日志
-        logger.opt(depth=depth, exception=record.exc_info).log(
-            level, record.getMessage()
-        )
+# 注意：已移除 InterceptHandler
+# 第三方库（如 SQLAlchemy、uvicorn、fastapi）将使用它们自己的日志格式
+# 不再统一转发到 Loguru
 

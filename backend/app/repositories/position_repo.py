@@ -10,7 +10,7 @@ from decimal import Decimal
 
 from app.models.position import Position
 from app.repositories.base import BaseRepository
-from app.core.logging import get_logger
+from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -100,61 +100,6 @@ class PositionRepository(BaseRepository[Position]):
                 Position.status == "active"
             )\
             .all()
-    
-    def get_by_symbol(
-        self,
-        session_id: int,
-        symbol: str,
-        active_only: bool = True
-    ) -> List[Position]:
-        """
-        根据会话和交易对获取持仓
-        
-        Args:
-            session_id: 会话 ID
-            symbol: 交易对
-            active_only: 是否只返回活跃持仓
-            
-        Returns:
-            持仓列表
-        """
-        query = self.db.query(Position).filter(
-            Position.session_id == session_id,
-            Position.symbol == symbol
-        )
-        
-        if active_only:
-            query = query.filter(Position.status == "active")
-        
-        return query.order_by(desc(Position.created_at)).all()
-    
-    def update_price(
-        self,
-        position_id: int,
-        current_price: Decimal
-    ) -> Optional[Position]:
-        """
-        更新持仓当前价格和未实现盈亏
-        
-        Args:
-            position_id: 持仓 ID
-            current_price: 当前价格
-            
-        Returns:
-            更新后的持仓或 None
-        """
-        position = self.get_by_id(position_id)
-        if not position:
-            return None
-        
-        # 计算未实现盈亏
-        unrealized_pnl = (current_price - position.entry_price) * position.quantity * position.leverage
-        
-        return self.update(
-            position_id,
-            current_price=current_price,
-            unrealized_pnl=unrealized_pnl
-        )
     
     def close_position(
         self,
@@ -252,4 +197,46 @@ class PositionRepository(BaseRepository[Position]):
             .order_by(desc(Position.created_at))\
             .limit(limit)\
             .all()
+
+    def update_stop_loss_take_profit(
+        self,
+        position_id: int,
+        stop_loss: Optional[Decimal] = None,
+        take_profit: Optional[Decimal] = None
+    ) -> Optional[Position]:
+        """
+        更新持仓的止损止盈
+        
+        Args:
+            position_id: 持仓 ID
+            stop_loss: 止损价格
+            take_profit: 止盈价格
+            
+        Returns:
+            更新后的持仓或 None
+        """
+        position = self.get_by_id(position_id)
+        if not position:
+            return None
+        
+        update_data = {}
+        if stop_loss is not None:
+            update_data['stop_loss'] = stop_loss
+        if take_profit is not None:
+            update_data['take_profit'] = take_profit
+        
+        if not update_data:
+            return position
+        
+        updated = self.update(position_id, **update_data)
+        
+        if updated:
+            logger.info(
+                "持仓止损止盈已更新",
+                position_id=position_id,
+                stop_loss=stop_loss,
+                take_profit=take_profit
+            )
+        
+        return updated
 

@@ -142,39 +142,64 @@ export const marketApi = {
 
 /**
  * Agent API
- * 交易代理控制 API
+ * 交易代理控制 API (更新以匹配新的后端 API)
  */
 export const agentApi = {
   /**
-   * 启动交易代理
+   * 运行一次决策周期（单次执行）
    */
-  startAgent: async (params: {
-    session_id?: number;
-    decision_interval?: number;
-    symbols?: string[];
-    risk_params?: Record<string, any>;
-  }): Promise<any> => {
-    const response = await apiClient.post('/api/v1/agent/start', params);
+  runOnce: async (
+    sessionId: number,
+    params: {
+      symbols?: string[];
+      risk_params?: Record<string, any>;
+      max_iterations?: number;
+      model?: string;
+    }
+  ): Promise<any> => {
+    const response = await apiClient.post(
+      `/api/v1/agent/sessions/${sessionId}/run-once`,
+      params
+    );
     return response.data;
   },
 
   /**
-   * 停止交易代理
+   * 启动后台挂机代理
    */
-  stopAgent: async (session_id?: number): Promise<any> => {
-    const response = await apiClient.post('/api/v1/agent/stop', {
-      session_id,
-    });
+  startAgent: async (
+    sessionId: number,
+    params: {
+      symbols?: string[];
+      risk_params?: Record<string, any>;
+      max_iterations?: number;
+      model?: string;
+    }
+  ): Promise<any> => {
+    const response = await apiClient.post(
+      `/api/v1/agent/sessions/${sessionId}/start-background`,
+      params
+    );
     return response.data;
   },
 
   /**
-   * 获取代理状态
+   * 停止后台代理
    */
-  getAgentStatus: async (session_id?: number): Promise<any> => {
-    const response = await apiClient.get('/api/v1/agent/status', {
-      params: { session_id },
-    });
+  stopAgent: async (sessionId: number): Promise<any> => {
+    const response = await apiClient.post(
+      `/api/v1/agent/sessions/${sessionId}/stop-background`
+    );
+    return response.data;
+  },
+
+  /**
+   * 获取后台代理状态
+   */
+  getAgentStatus: async (sessionId: number): Promise<any> => {
+    const response = await apiClient.get(
+      `/api/v1/agent/sessions/${sessionId}/background-status`
+    );
     return response.data;
   },
 
@@ -182,20 +207,53 @@ export const agentApi = {
    * 列出所有运行中的代理
    */
   listRunningAgents: async (): Promise<any> => {
-    const response = await apiClient.get('/api/v1/agent/list');
+    const response = await apiClient.get('/api/v1/agent/background-agents/list');
     return response.data;
   },
 
   /**
-   * 更新代理配置
+   * 测试 Agent（不需要真实会话）
    */
-  updateAgentConfig: async (params: {
-    session_id?: number;
-    decision_interval?: number;
+  testAgent: async (params: {
     symbols?: string[];
     risk_params?: Record<string, any>;
+    max_iterations?: number;
+    model?: string;
   }): Promise<any> => {
-    const response = await apiClient.patch('/api/v1/agent/config', params);
+    const response = await apiClient.post('/api/v1/agent/test', params);
+    return response.data;
+  },
+};
+
+/**
+ * Session API
+ * 会话管理 API
+ */
+export const sessionApi = {
+  /**
+   * 获取会话详情（包括持仓、交易记录、决策记录）
+   */
+  getSessionDetails: async (sessionId: number): Promise<any> => {
+    const response = await apiClient.get(`/api/v1/session/${sessionId}`);
+    return response.data;
+  },
+
+  /**
+   * 获取活跃会话
+   */
+  getActiveSession: async (): Promise<any> => {
+    const response = await apiClient.get('/api/v1/session/active');
+    return response.data;
+  },
+
+  /**
+   * 获取会话列表
+   */
+  getSessionList: async (params?: {
+    status?: string;
+    limit?: number;
+  }): Promise<any> => {
+    const response = await apiClient.get('/api/v1/session/list', { params });
     return response.data;
   },
 };

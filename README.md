@@ -81,7 +81,6 @@ npm run dev
 
 ```bash
 cd backend
-source venv/bin/activate  # Linux/Mac
 uvicorn app.main:app --reload --host 0.0.0.0 --port 9527
 ```
 

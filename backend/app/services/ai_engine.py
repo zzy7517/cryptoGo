@@ -9,9 +9,9 @@ from functools import lru_cache
 from sqlalchemy.orm import Session
 from decimal import Decimal
 
-from app.core.config import settings
-from app.core.logging import get_logger
-from app.core.exceptions import ConfigurationException
+from app.utils.config import settings
+from app.utils.logging import get_logger
+from app.utils.exceptions import ConfigurationException
 from app.repositories.ai_decision_repo import AIDecisionRepository
 
 logger = get_logger(__name__)

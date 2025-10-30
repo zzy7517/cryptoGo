@@ -7,7 +7,7 @@ from sqlalchemy import Column, BigInteger, Numeric, DateTime, Index, ForeignKey
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 
-from app.core.database import Base
+from app.utils.database import Base
 
 
 class AccountSnapshot(Base):

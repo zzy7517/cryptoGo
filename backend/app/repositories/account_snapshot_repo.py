@@ -10,7 +10,7 @@ from decimal import Decimal
 
 from app.models.account_snapshot import AccountSnapshot
 from app.repositories.base import BaseRepository
-from app.core.logging import get_logger
+from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -112,85 +112,3 @@ class AccountSnapshotRepository(BaseRepository[AccountSnapshot]):
             .filter(AccountSnapshot.session_id == session_id)\
             .order_by(desc(AccountSnapshot.created_at))\
             .first()
-    
-    def get_snapshots_for_chart(
-        self,
-        session_id: int,
-        limit: int = 1000
-    ) -> List[Dict[str, Any]]:
-        """
-        获取用于绘制图表的快照数据
-        
-        Args:
-            session_id: 会话 ID
-            limit: 返回数量
-            
-        Returns:
-            简化的快照数据列表
-        """
-        snapshots = self.get_by_session(session_id, limit)
-        
-        return [
-            {
-                "timestamp": snapshot.created_at.isoformat(),
-                "total_value": float(snapshot.total_value),
-                "total_pnl": float(snapshot.total_pnl) if snapshot.total_pnl else 0,
-                "total_return_pct": float(snapshot.total_return_pct) if snapshot.total_return_pct else 0,
-                "max_drawdown": float(snapshot.max_drawdown) if snapshot.max_drawdown else 0
-            }
-            for snapshot in reversed(snapshots)  # 按时间正序
-        ]
-    
-    def calculate_performance_metrics(
-        self,
-        session_id: int
-    ) -> Dict[str, Any]:
-        """
-        计算会话的绩效指标
-        
-        Args:
-            session_id: 会话 ID
-            
-        Returns:
-            绩效指标字典
-        """
-        snapshots = self.get_by_session(session_id, limit=10000)
-        
-        if not snapshots:
-            return {
-                "max_drawdown": 0,
-                "sharpe_ratio": 0,
-                "total_return": 0,
-                "volatility": 0
-            }
-        
-        # 计算最大回撤
-        returns = [float(s.total_return_pct or 0) for s in snapshots]
-        max_return = 0
-        max_drawdown = 0
-        
-        for ret in returns:
-            max_return = max(max_return, ret)
-            drawdown = max_return - ret
-            max_drawdown = max(max_drawdown, drawdown)
-        
-        # 获取最新的夏普比率
-        latest = snapshots[0]  # 已经按时间倒序
-        sharpe_ratio = float(latest.sharpe_ratio) if latest.sharpe_ratio else 0
-        
-        # 总收益
-        total_return = float(latest.total_return_pct) if latest.total_return_pct else 0
-        
-        # 波动率（简化计算）
-        if len(returns) > 1:
-            import statistics
-            volatility = statistics.stdev(returns)
-        else:
-            volatility = 0
-        
-        return {
-            "max_drawdown": max_drawdown,
-            "sharpe_ratio": sharpe_ratio,
-            "total_return": total_return,
-            "volatility": volatility
-        }

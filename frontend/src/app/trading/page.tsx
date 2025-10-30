@@ -4,10 +4,11 @@
  * 交易终端页面 (Trading Terminal Page)
  * 
  * 核心页面：加密货币交易终端主界面，集成所有交易相关的数据展示和交互功能
- * 修改时间: 2025-10-29 (添加会话管理功能)
+ * 修改时间: 2025-10-29 (优化UI布局和按钮命名，修复hydration错误)
  * 
  * 路由：
  * - 访问路径: /trading
+ * - URL参数: ?startSession=true (自动打开开始交易对话框，仅客户端处理)
  * 
  * 主要功能：
  * 1. 交易对选择 - 支持多个币种永续合约
@@ -37,10 +38,8 @@
  */
 import React, { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import CandlestickChart from '@/components/CandlestickChart';
-import TechnicalIndicators from '@/components/TechnicalIndicators';
-import ContractData from '@/components/ContractData';
-import AgentMonitor from '@/components/AgentMonitor';
+import TradingMonitor from '@/components/TradingMonitor';
+import MarketView from '@/components/MarketView';
 import { useMarketStore } from '@/stores/marketStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { marketApi, agentApi } from '@/lib/api';
@@ -86,25 +85,45 @@ export default function TradingPage() {
   const [autoStartAgent, setAutoStartAgent] = useState(true);
   const [decisionInterval, setDecisionInterval] = useState('60');
   const [agentStatus, setAgentStatus] = useState<any>(null);
+  
+  // Tab切换状态：'monitor' - 交易监控, 'market' - 市场行情
+  const [activeTab, setActiveTab] = useState<'monitor' | 'market'>('monitor');
 
   // 页面加载时获取活跃会话
   useEffect(() => {
     fetchActiveSession();
   }, [fetchActiveSession]);
 
+  // 检测URL参数，如果有 startSession=true 则自动打开对话框（仅客户端）
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('startSession') === 'true' && !activeSession) {
+        setShowSessionDialog(true);
+        // 清除 URL 参数，避免刷新页面时重复弹窗
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    }
+  }, [activeSession]);
+
   // 轮询获取 Agent 状态
   useEffect(() => {
-    if (!activeSession) {
+    if (!activeSession?.session_id) {
       setAgentStatus(null);
       return;
     }
 
     const fetchAgentStatus = async () => {
       try {
-        const response = await agentApi.getAgentStatus();
+        const response = await agentApi.getAgentStatus(activeSession.session_id);
         setAgentStatus(response.data);
-      } catch (error) {
-        console.error('获取 Agent 状态失败:', error);
+      } catch (error: any) {
+        // 如果是404错误，说明Agent未运行
+        if (error.response?.status === 404) {
+          setAgentStatus(null);
+        } else {
+          console.error('获取 Agent 状态失败:', error);
+        }
       }
     };
 
@@ -208,11 +227,13 @@ export default function TradingPage() {
       );
       
       // 如果勾选了自动启动 Agent
-      if (autoStartAgent) {
+      if (autoStartAgent && session?.session_id) {
         try {
-          await agentApi.startAgent({
-            decision_interval: parseInt(decisionInterval),
+          await agentApi.startAgent(session.session_id, {
             symbols: [currentSymbol],
+            risk_params: {
+              decision_interval: parseInt(decisionInterval),
+            },
           });
         } catch (error) {
           console.error('启动 Agent 失败:', error);
@@ -241,10 +262,17 @@ export default function TradingPage() {
   };
 
   const handleStartAgent = async () => {
+    if (!activeSession?.session_id) {
+      alert('请先开始交易会话');
+      return;
+    }
+    
     try {
-      await agentApi.startAgent({
-        decision_interval: parseInt(decisionInterval),
+      await agentApi.startAgent(activeSession.session_id, {
         symbols: [currentSymbol],
+        risk_params: {
+          decision_interval: parseInt(decisionInterval),
+        },
       });
     } catch (error) {
       console.error('启动 Agent 失败:', error);
@@ -253,10 +281,15 @@ export default function TradingPage() {
   };
 
   const handleStopAgent = async () => {
+    if (!activeSession?.session_id) {
+      alert('请先开始交易会话');
+      return;
+    }
+    
     if (!confirm('确定要停止交易代理吗？')) return;
     
     try {
-      await agentApi.stopAgent();
+      await agentApi.stopAgent(activeSession.session_id);
       setAgentStatus(null);
     } catch (error) {
       console.error('停止 Agent 失败:', error);
@@ -265,26 +298,28 @@ export default function TradingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-4">
+    <div className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-[1920px] mx-auto">
         {/* 顶部标题栏 */}
-        <div className="mb-4 flex justify-between items-start">
+        <div className="mb-6 flex justify-between items-start">
           <div>
-            <h1 className="text-3xl font-bold mb-2">CryptoGo 交易终端</h1>
-            <p className="text-gray-400">实时加密货币交易数据</p>
+            <h1 className="text-4xl font-bold text-gray-800 mb-2">
+              CryptoGo 市场看板
+            </h1>
+            <p className="text-gray-500">实时加密货币交易数据与AI智能分析</p>
           </div>
           
           {/* 会话控制区域 */}
-          <div className="flex items-center gap-4">
-            {activeSession ? (
-              <div className="bg-gray-900 rounded-lg p-4 border border-green-500">
+          {activeSession && (
+            <div className="flex items-center gap-4">
+              <div className="bg-white rounded-lg p-4 border border-green-300 shadow-sm">
                 <div className="flex items-center gap-3">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                      <span className="text-sm font-semibold text-green-400">会话运行中</span>
+                      <span className="text-sm font-semibold text-green-600">会话运行中</span>
                     </div>
-                    <div className="text-xs text-gray-400">
+                    <div className="text-xs text-gray-600">
                       {activeSession.session_name}
                     </div>
                     {activeSession.initial_capital && (
@@ -295,8 +330,8 @@ export default function TradingPage() {
                     {agentStatus && (
                       <div className="text-xs mt-2 space-y-1">
                         <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></div>
-                          <span className="text-blue-400">Agent 运行中</span>
+                          <div className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-pulse"></div>
+                          <span className="text-teal-600">Agent 运行中</span>
                         </div>
                         <div className="text-gray-500">
                           循环次数: {agentStatus.loop_count} | 间隔: {agentStatus.decision_interval}秒
@@ -308,14 +343,14 @@ export default function TradingPage() {
                     {agentStatus ? (
                       <button
                         onClick={handleStopAgent}
-                        className="px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded text-sm font-medium transition-colors"
+                        className="px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
                       >
                         停止 Agent
                       </button>
                     ) : (
                       <button
                         onClick={handleStartAgent}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors"
+                        className="px-4 py-2 bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
                       >
                         启动 Agent
                       </button>
@@ -323,48 +358,39 @@ export default function TradingPage() {
                     <button
                       onClick={handleEndSession}
                       disabled={sessionLoading}
-                      className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-sm font-medium transition-colors disabled:opacity-50"
+                      className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 shadow-sm"
                     >
                       结束会话
                     </button>
                   </div>
                 </div>
               </div>
-            ) : (
-              <button
-                onClick={() => setShowSessionDialog(true)}
-                disabled={sessionLoading}
-                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 flex items-center gap-2"
-              >
-                <span className="text-xl">▶</span>
-                开始新会话
-              </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* 会话错误提示 */}
         {sessionError && (
-          <div className="mb-4 bg-red-900/30 border border-red-500 rounded-lg p-4 flex justify-between items-center">
-            <span className="text-red-400">{sessionError}</span>
+          <div className="mb-4 bg-red-50 border border-red-300 rounded-lg p-4 flex justify-between items-center shadow-sm">
+            <span className="text-red-600 font-medium">{sessionError}</span>
             <button
               onClick={clearError}
-              className="text-red-400 hover:text-red-300"
+              className="text-red-500 hover:text-red-700 font-bold"
             >
               ✕
             </button>
           </div>
         )}
 
-        {/* 开始会话对话框 */}
+        {/* 开始交易对话框 */}
         {showSessionDialog && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-gray-900 rounded-lg p-6 max-w-md w-full mx-4">
-              <h2 className="text-xl font-bold mb-4">开始新的交易会话</h2>
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-8 max-w-md w-full mx-4 shadow-lg">
+              <h2 className="text-2xl font-bold text-gray-800 mb-6">开始交易</h2>
               
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm text-gray-400 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     会话名称（可选）
                   </label>
                   <input
@@ -372,12 +398,12 @@ export default function TradingPage() {
                     value={sessionName}
                     onChange={(e) => setSessionName(e.target.value)}
                     placeholder="例如：BTC 策略测试"
-                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-800 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-colors"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm text-gray-400 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     初始资金（USDT）
                   </label>
                   <input
@@ -385,39 +411,39 @@ export default function TradingPage() {
                     value={initialCapital}
                     onChange={(e) => setInitialCapital(e.target.value)}
                     placeholder="10000"
-                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-800 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-colors"
                   />
                 </div>
 
-                <div className="border-t border-gray-700 pt-4">
+                <div className="border-t border-gray-200 pt-4">
                   <div className="flex items-center mb-3">
                     <input
                       type="checkbox"
                       id="autoStartAgent"
                       checked={autoStartAgent}
                       onChange={(e) => setAutoStartAgent(e.target.checked)}
-                      className="mr-2"
+                      className="mr-3 w-4 h-4 text-teal-500 focus:ring-teal-400 rounded"
                     />
-                    <label htmlFor="autoStartAgent" className="text-sm text-gray-300">
+                    <label htmlFor="autoStartAgent" className="text-sm font-medium text-gray-700">
                       自动启动交易代理
                     </label>
                   </div>
 
                   {autoStartAgent && (
-                    <div className="space-y-3 pl-6">
+                    <div className="space-y-3 pl-7">
                       <div>
-                        <label className="block text-sm text-gray-400 mb-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
                           决策间隔（秒）
                         </label>
-                        <div className="flex gap-2 mb-2">
+                        <div className="flex gap-2 mb-2 flex-wrap">
                           {[30, 60, 300, 600].map((seconds) => (
                             <button
                               key={seconds}
                               onClick={() => setDecisionInterval(seconds.toString())}
-                              className={`px-3 py-1 rounded text-xs ${
+                              className={`px-4 py-2 rounded-lg text-xs font-medium transition-all ${
                                 decisionInterval === seconds.toString()
-                                  ? 'bg-blue-600 text-white'
-                                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                                  ? 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white shadow-sm'
+                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                               }`}
                             >
                               {seconds < 60 ? `${seconds}秒` : `${seconds / 60}分钟`}
@@ -430,7 +456,7 @@ export default function TradingPage() {
                           onChange={(e) => setDecisionInterval(e.target.value)}
                           min="10"
                           max="3600"
-                          className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+                          className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-800 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-colors"
                         />
                       </div>
                     </div>
@@ -438,194 +464,137 @@ export default function TradingPage() {
                 </div>
               </div>
 
-              <div className="flex gap-3 mt-6">
+              <div className="flex gap-3 mt-8">
                 <button
                   onClick={() => setShowSessionDialog(false)}
-                  className="flex-1 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded transition-colors"
+                  className="flex-1 px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg font-semibold transition-colors"
                 >
                   取消
                 </button>
                 <button
                   onClick={handleStartSession}
                   disabled={sessionLoading}
-                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded transition-colors disabled:opacity-50"
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700 text-white rounded-lg font-semibold transition-all shadow-sm disabled:opacity-50"
                 >
-                  {sessionLoading ? '正在开始...' : '开始会话'}
+                  {sessionLoading ? '正在开始...' : '开始交易'}
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* 控制面板 */}
-        <div className="bg-gray-900 rounded-lg p-4 mb-4">
-          <div className="flex flex-wrap items-center gap-4">
-            {/* 交易对选择 */}
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">交易对</label>
-              <select
-                value={currentSymbol}
-                onChange={handleSymbolChange}
-                className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500 cursor-pointer min-w-[200px]"
-              >
-                {TRADING_PAIRS.map((pair) => (
-                  <option key={pair.symbol} value={pair.symbol} className="bg-gray-800">
-                    {pair.symbol} - {pair.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* 时间周期选择 */}
-            <div className="flex-1">
-              <label className="block text-sm text-gray-400 mb-1">时间周期</label>
-              <div className="flex gap-2">
-                {INTERVALS.map((interval) => (
-                  <button
-                    key={interval.value}
-                    onClick={() => handleIntervalChange(interval.value)}
-                    className={`px-4 py-2 rounded transition-colors ${
-                      currentInterval === interval.value
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                    }`}
-                  >
-                    {interval.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 主要内容区域 */}
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
-          {/* K线图 - 占3列 */}
-          <div className="xl:col-span-3 bg-gray-900 rounded-lg p-4">
-            <CandlestickChart data={klineData} symbol={currentSymbol} />
-          </div>
-
-          {/* 右侧信息面板 - 占1列 */}
-          <div className="space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto custom-scrollbar">
-            {/* Agent 监控 */}
-            {activeSession && (
-              <AgentMonitor sessionId={activeSession.session_id} />
-            )}
-
-            {/* 实时价格 */}
-            <div className="bg-gray-900 rounded-lg p-4">
-              <h3 className="text-sm text-gray-400 mb-3">实时价格</h3>
-              <div
-                className={`text-4xl font-bold mb-2 transition-colors duration-300 ${
-                  priceAnimation === 'up'
-                    ? 'text-green-400'
-                    : priceAnimation === 'down'
-                    ? 'text-red-400'
-                    : 'text-white'
+        {/* Tab切换栏和控制面板 */}
+        <div className="bg-white rounded-lg p-6 mb-6 shadow-sm border border-gray-200">
+          {/* Tab 切换 */}
+          {activeSession && (
+            <div className="flex gap-3 mb-6 border-b border-gray-200">
+              <button
+                onClick={() => setActiveTab('monitor')}
+                className={`px-6 py-3 font-semibold transition-all relative ${
+                  activeTab === 'monitor'
+                    ? 'text-teal-600'
+                    : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
-                ${formatNumber(tickerData?.last, 2)}
-              </div>
-              {tickerData && tickerData.percentage !== null && (
-                <div
-                  className={`text-lg font-semibold ${
-                    tickerData.percentage >= 0 ? 'text-green-400' : 'text-red-400'
-                  }`}
+                交易监控
+                {activeTab === 'monitor' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-600"></div>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('market')}
+                className={`px-6 py-3 font-semibold transition-all relative ${
+                  activeTab === 'market'
+                    ? 'text-teal-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                市场行情
+                {activeTab === 'market' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-600"></div>
+                )}
+              </button>
+            </div>
+          )}
+          
+          {/* 控制面板 - 仅在市场行情Tab显示 */}
+          {(activeTab === 'market' || !activeSession) && (
+            <div className="flex flex-wrap items-center gap-6">
+              {/* 交易对选择 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">交易对</label>
+                <select
+                  value={currentSymbol}
+                  onChange={handleSymbolChange}
+                  className="bg-gray-50 border border-gray-300 rounded-lg px-4 py-2 text-gray-800 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 cursor-pointer min-w-[200px] font-medium transition-colors"
                 >
-                  {tickerData.percentage >= 0 ? '+' : ''}
-                  {formatNumber(tickerData.percentage, 2)}%
-                  <span className="text-sm ml-2">
-                    ({tickerData.change && tickerData.change >= 0 ? '+' : ''}
-                    {formatNumber(tickerData.change, 2)})
-                  </span>
-                </div>
-              )}
-            </div>
+                  {TRADING_PAIRS.map((pair) => (
+                    <option key={pair.symbol} value={pair.symbol} className="bg-white">
+                      {pair.symbol} - {pair.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            {/* 24小时统计 */}
-            <div className="bg-gray-900 rounded-lg p-4">
-              <h3 className="text-sm text-gray-400 mb-3">24小时统计</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-gray-400">最高价</span>
-                  <span className="font-semibold text-green-400">
-                    ${formatNumber(tickerData?.high)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">最低价</span>
-                  <span className="font-semibold text-red-400">
-                    ${formatNumber(tickerData?.low)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">成交量</span>
-                  <span className="font-semibold">{formatVolume(tickerData?.volume)}</span>
+              {/* 时间周期选择 */}
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-2">时间周期</label>
+                <div className="flex gap-2 flex-wrap">
+                  {INTERVALS.map((interval) => (
+                    <button
+                      key={interval.value}
+                      onClick={() => handleIntervalChange(interval.value)}
+                      className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                        currentInterval === interval.value
+                          ? 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white shadow-sm'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {interval.label}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
-
-            {/* 买卖价 */}
-            <div className="bg-gray-900 rounded-lg p-4">
-              <h3 className="text-sm text-gray-400 mb-3">订单簿</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-gray-400">买一价</span>
-                  <span className="font-semibold text-green-400">
-                    ${formatNumber(tickerData?.bid)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">卖一价</span>
-                  <span className="font-semibold text-red-400">
-                    ${formatNumber(tickerData?.ask)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">价差</span>
-                  <span className="font-semibold">
-                    ${formatNumber(
-                      tickerData?.ask && tickerData?.bid
-                        ? tickerData.ask - tickerData.bid
-                        : 0,
-                      2
-                    )}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* 技术指标 */}
-            <TechnicalIndicators
-              indicators={indicators?.latest_values || null}
-              loading={indicatorsLoading}
-            />
-
-            {/* 合约数据 */}
-            <ContractData
-              fundingRate={fundingRate || null}
-              openInterest={openInterest || null}
-              loading={fundingLoading || openInterestLoading}
-            />
-          </div>
+          )}
         </div>
+
+        {/* 主要内容区域 - 根据Tab切换 */}
+        {activeSession && activeTab === 'monitor' ? (
+          // 交易监控视图
+          <TradingMonitor sessionId={activeSession.session_id} />
+        ) : (
+          // 市场行情视图
+          <MarketView
+            klineData={klineData}
+            currentSymbol={currentSymbol}
+            tickerData={tickerData}
+            priceAnimation={priceAnimation}
+            indicators={indicators}
+            indicatorsLoading={indicatorsLoading}
+            fundingRate={fundingRate}
+            openInterest={openInterest}
+            fundingLoading={fundingLoading}
+            openInterestLoading={openInterestLoading}
+          />
+        )}
       </div>
 
       {/* 自定义滚动条样式 */}
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
+          width: 8px;
         }
         .custom-scrollbar::-webkit-scrollbar-track {
-          background: #1a1a1a;
-          border-radius: 3px;
+          background: #f3f4f6;
+          border-radius: 4px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #4a4a4a;
-          border-radius: 3px;
+          background: linear-gradient(180deg, #14b8a6, #06b6d4);
+          border-radius: 4px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #5a5a5a;
+          background: linear-gradient(180deg, #0d9488, #0891b2);
         }
       `}</style>
     </div>

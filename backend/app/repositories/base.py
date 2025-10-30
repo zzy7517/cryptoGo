@@ -7,7 +7,7 @@ from typing import Generic, TypeVar, Type, List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from app.core.database import Base
+from app.utils.database import Base
 
 ModelType = TypeVar("ModelType", bound=Base)
 
@@ -47,34 +47,6 @@ class BaseRepository(Generic[ModelType]):
         """
         return self.db.query(self.model).filter(self.model.id == id).first()
     
-    def get_all(self, limit: int = 100, offset: int = 0) -> List[ModelType]:
-        """
-        获取所有记录
-        
-        Args:
-            limit: 返回数量限制
-            offset: 偏移量
-            
-        Returns:
-            模型实例列表
-        """
-        return self.db.query(self.model).offset(offset).limit(limit).all()
-    
-    def get_recent(self, limit: int = 10) -> List[ModelType]:
-        """
-        获取最近的记录（按创建时间倒序）
-        
-        Args:
-            limit: 返回数量
-            
-        Returns:
-            模型实例列表
-        """
-        return self.db.query(self.model)\
-            .order_by(desc(self.model.created_at))\
-            .limit(limit)\
-            .all()
-    
     def update(self, id: int, **kwargs) -> Optional[ModelType]:
         """
         更新记录
@@ -97,31 +69,3 @@ class BaseRepository(Generic[ModelType]):
         self.db.commit()
         self.db.refresh(instance)
         return instance
-    
-    def delete(self, id: int) -> bool:
-        """
-        删除记录
-        
-        Args:
-            id: 记录 ID
-            
-        Returns:
-            是否删除成功
-        """
-        instance = self.get_by_id(id)
-        if not instance:
-            return False
-        
-        self.db.delete(instance)
-        self.db.commit()
-        return True
-    
-    def count(self) -> int:
-        """
-        统计记录数
-        
-        Returns:
-            记录总数
-        """
-        return self.db.query(self.model).count()
-
