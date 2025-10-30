@@ -11,7 +11,6 @@ from decimal import Decimal
 from app.repositories.trading_session_repo import TradingSessionRepository
 from app.repositories.position_repo import PositionRepository
 from app.repositories.trade_repo import TradeRepository
-from app.repositories.account_snapshot_repo import AccountSnapshotRepository
 from app.repositories.ai_decision_repo import AIDecisionRepository
 from app.models.trading_session import TradingSession
 from app.utils.logging import get_logger
@@ -28,7 +27,6 @@ class TradingSessionService:
         self.session_repo = TradingSessionRepository(db)
         self.position_repo = PositionRepository(db)
         self.trade_repo = TradeRepository(db)
-        self.snapshot_repo = AccountSnapshotRepository(db)
         self.decision_repo = AIDecisionRepository(db)
     
     def start_session(
@@ -54,10 +52,7 @@ class TradingSessionService:
         # 检查是否已有活跃会话
         active_session = self.session_repo.get_active_session()
         if active_session:
-            raise BusinessException(
-                f"已存在活跃会话 (ID: {active_session.id})，请先结束当前会话",
-                error_code="ACTIVE_SESSION_EXISTS"
-            )
+            return active_session
         
         # 生成会话名称
         if not session_name:
@@ -76,17 +71,7 @@ class TradingSessionService:
             session_name=session_name,
             initial_capital=initial_capital
         )
-        
-        # 创建初始快照
-        if initial_capital:
-            self.snapshot_repo.create_snapshot(
-                session_id=session.id,
-                total_value=Decimal(str(initial_capital)),
-                available_cash=Decimal(str(initial_capital)),
-                total_pnl=Decimal(0),
-                total_return_pct=Decimal(0)
-            )
-        
+
         return session
     
     def end_session(
@@ -135,11 +120,10 @@ class TradingSessionService:
         
         # 计算最终统计
         statistics = self._calculate_session_statistics(session_id)
-        
-        # 获取最新快照
-        latest_snapshot = self.snapshot_repo.get_latest(session_id)
-        final_capital = float(latest_snapshot.total_value) if latest_snapshot else session.initial_capital
-        
+
+        # 使用初始资金作为最终资金（如果没有其他数据源）
+        final_capital = session.initial_capital
+
         # 更新会话
         updated_session = self.session_repo.end_session(
             session_id=session_id,
@@ -203,10 +187,7 @@ class TradingSessionService:
         
         # 获取 AI 决策
         decisions = self.decision_repo.get_by_session(session_id)
-        
-        # 获取快照
-        snapshots = self.snapshot_repo.get_by_session(session_id, limit=10)
-        
+
         return {
             "session": {
                 "id": session.id,
@@ -221,7 +202,6 @@ class TradingSessionService:
                 "total_trades": session.total_trades,
                 "winning_trades": session.winning_trades,
                 "losing_trades": session.losing_trades,
-                "win_rate": float(session.win_rate) if session.win_rate else None,
                 "config": session.config,
                 "notes": session.notes
             },
@@ -230,15 +210,7 @@ class TradingSessionService:
                 "total_positions_count": len(positions),
                 "total_trades_count": len(trades),
                 "total_decisions_count": len(decisions)
-            },
-            "recent_snapshots": [
-                {
-                    "timestamp": s.created_at.isoformat(),
-                    "total_value": float(s.total_value),
-                    "total_pnl": float(s.total_pnl) if s.total_pnl else 0
-                }
-                for s in snapshots
-            ]
+            }
         }
     
     def get_session_list(
@@ -272,8 +244,7 @@ class TradingSessionService:
                 "final_capital": float(s.final_capital) if s.final_capital else None,
                 "total_pnl": float(s.total_pnl) if s.total_pnl else None,
                 "total_return_pct": float(s.total_return_pct) if s.total_return_pct else None,
-                "total_trades": s.total_trades,
-                "win_rate": float(s.win_rate) if s.win_rate else None
+                "total_trades": s.total_trades
             }
             for s in sessions
         ]
@@ -295,61 +266,10 @@ class TradingSessionService:
         positions = self.position_repo.get_by_session(session_id, limit=10000)
         total_pnl = self.position_repo.get_total_pnl(session_id)
         
-        # AI 决策统计
-        decisions = self.decision_repo.get_by_session(session_id, limit=10000)
-        avg_confidence = (
-            sum([float(d.confidence) for d in decisions if d.confidence]) / len(decisions)
-        ) if decisions else 0
-        
         return {
             "total_trades": trade_stats["total_trades"],
             "winning_trades": trade_stats["winning_trades"],
             "losing_trades": trade_stats["losing_trades"],
-            "win_rate": trade_stats["win_rate"],
-            "total_pnl": trade_stats["total_pnl"],
-            "biggest_win": trade_stats["biggest_win"],
-            "biggest_loss": trade_stats["biggest_loss"],
-            "avg_leverage": trade_stats["avg_leverage"],
-            "avg_confidence": Decimal(str(avg_confidence))
+            "total_pnl": trade_stats["total_pnl"]
         }
-    
-    def create_snapshot(
-        self,
-        session_id: int,
-        total_value: float,
-        available_cash: float,
-        positions_summary: Optional[Dict[str, Any]] = None
-    ) -> None:
-        """
-        创建账户快照
-        
-        Args:
-            session_id: 会话 ID
-            total_value: 总价值
-            available_cash: 可用现金
-            positions_summary: 持仓汇总
-        """
-        session = self.session_repo.get_by_id(session_id)
-        if not session:
-            raise BusinessException(
-                f"会话 {session_id} 不存在",
-                error_code="SESSION_NOT_FOUND"
-            )
-        
-        # 计算盈亏
-        if session.initial_capital:
-            total_pnl = Decimal(str(total_value)) - Decimal(str(session.initial_capital))
-            total_return_pct = (total_pnl / Decimal(str(session.initial_capital))) * 100
-        else:
-            total_pnl = Decimal(0)
-            total_return_pct = Decimal(0)
-        
-        self.snapshot_repo.create_snapshot(
-            session_id=session_id,
-            total_value=Decimal(str(total_value)),
-            available_cash=Decimal(str(available_cash)),
-            total_pnl=total_pnl,
-            total_return_pct=total_return_pct,
-            positions_summary=positions_summary
-        )
 

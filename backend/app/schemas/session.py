@@ -48,20 +48,12 @@ class SessionBasic(SessionBase):
     total_pnl: Optional[float] = Field(None, description="总盈亏")
     total_return_pct: Optional[float] = Field(None, description="总收益率 (%)")
     total_trades: int = Field(default=0, description="总交易次数")
-    win_rate: Optional[float] = Field(None, description="胜率 (%)")
 
 
 class SessionDetail(SessionBasic):
     """会话详细信息"""
     winning_trades: int = Field(default=0, description="盈利交易次数")
     losing_trades: int = Field(default=0, description="亏损交易次数")
-    avg_leverage: Optional[float] = Field(None, description="平均杠杆倍数")
-    avg_confidence: Optional[float] = Field(None, description="平均置信度")
-    biggest_win: Optional[float] = Field(None, description="最大单笔盈利")
-    biggest_loss: Optional[float] = Field(None, description="最大单笔亏损")
-    long_time_pct: Optional[float] = Field(None, description="做多时间占比 (%)")
-    short_time_pct: Optional[float] = Field(None, description="做空时间占比 (%)")
-    flat_time_pct: Optional[float] = Field(None, description="空仓时间占比 (%)")
     config: Optional[Dict[str, Any]] = Field(None, description="运行配置")
     notes: Optional[str] = Field(None, description="备注信息")
 
@@ -97,17 +89,4 @@ class SessionDetailResponse(BaseModel):
     """会话详情响应"""
     success: bool = Field(..., description="是否成功")
     data: Optional[SessionDetail] = Field(None, description="会话详情")
-
-
-class CreateSnapshotRequest(BaseModel):
-    """创建快照请求"""
-    total_value: float = Field(..., description="账户总价值", gt=0)
-    available_cash: float = Field(..., description="可用现金", ge=0)
-    positions_summary: Optional[Dict[str, Any]] = Field(None, description="持仓汇总")
-
-
-class SnapshotResponse(BaseModel):
-    """快照响应"""
-    success: bool = Field(..., description="是否成功")
-    message: str = Field(..., description="响应消息")
 

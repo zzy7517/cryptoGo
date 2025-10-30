@@ -7,7 +7,6 @@
 -- ============================================
 
 DROP TABLE IF EXISTS trades CASCADE;
-DROP TABLE IF EXISTS account_snapshots CASCADE;
 DROP TABLE IF EXISTS positions CASCADE;
 DROP TABLE IF EXISTS ai_decisions CASCADE;
 DROP TABLE IF EXISTS trading_sessions CASCADE;
@@ -41,18 +40,6 @@ CREATE TABLE trading_sessions (
     total_trades INTEGER DEFAULT 0,
     winning_trades INTEGER DEFAULT 0,
     losing_trades INTEGER DEFAULT 0,
-    win_rate NUMERIC(5, 2),
-    
-    -- 杠杆和置信度统计
-    avg_leverage NUMERIC(5, 2),
-    avg_confidence NUMERIC(5, 4),
-    biggest_win NUMERIC(20, 4),
-    biggest_loss NUMERIC(20, 4),
-    
-    -- 持仓时间分布（百分比）
-    long_time_pct NUMERIC(5, 2),
-    short_time_pct NUMERIC(5, 2),
-    flat_time_pct NUMERIC(5, 2),
     
     -- 配置信息
     config JSONB,
@@ -73,14 +60,6 @@ COMMENT ON COLUMN trading_sessions.initial_capital IS '初始资金';
 COMMENT ON COLUMN trading_sessions.final_capital IS '最终资金';
 COMMENT ON COLUMN trading_sessions.total_pnl IS '总盈亏';
 COMMENT ON COLUMN trading_sessions.total_return_pct IS '总收益率 (%)';
-COMMENT ON COLUMN trading_sessions.win_rate IS '胜率 (%)';
-COMMENT ON COLUMN trading_sessions.avg_leverage IS '平均杠杆倍数';
-COMMENT ON COLUMN trading_sessions.avg_confidence IS '平均置信度 (0-1)';
-COMMENT ON COLUMN trading_sessions.biggest_win IS '最大单笔盈利';
-COMMENT ON COLUMN trading_sessions.biggest_loss IS '最大单笔亏损';
-COMMENT ON COLUMN trading_sessions.long_time_pct IS '做多时间占比 (%)';
-COMMENT ON COLUMN trading_sessions.short_time_pct IS '做空时间占比 (%)';
-COMMENT ON COLUMN trading_sessions.flat_time_pct IS '空仓时间占比 (%)';
 COMMENT ON COLUMN trading_sessions.config IS '运行配置（JSON格式）';
 
 
@@ -204,52 +183,7 @@ COMMENT ON COLUMN ai_decisions.execution_result IS '执行结果（JSON格式）
 
 
 -- ============================================
--- 4. 账户快照表
--- ============================================
-
-CREATE TABLE account_snapshots (
-    id BIGSERIAL PRIMARY KEY,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    
-    -- 关联会话
-    session_id BIGINT REFERENCES trading_sessions(id) ON DELETE CASCADE,
-    
-    -- 账户信息
-    total_value NUMERIC(20, 4) NOT NULL,
-    available_cash NUMERIC(20, 4) NOT NULL,
-    total_pnl NUMERIC(20, 4),
-    total_return_pct NUMERIC(10, 4),
-    
-    -- 风险指标
-    sharpe_ratio NUMERIC(10, 6),
-    max_drawdown NUMERIC(10, 4),
-    
-    -- 持仓汇总
-    positions_summary JSONB,
-    
-    -- 关联
-    ai_decision_id BIGINT
-);
-
--- 索引
-CREATE INDEX idx_snapshot_session ON account_snapshots(session_id);
-CREATE INDEX idx_snapshot_created_at ON account_snapshots(created_at);
-
--- 注释
-COMMENT ON TABLE account_snapshots IS '账户快照表 - 定期记录账户状态';
-COMMENT ON COLUMN account_snapshots.session_id IS '所属交易会话ID';
-COMMENT ON COLUMN account_snapshots.total_value IS '账户总价值';
-COMMENT ON COLUMN account_snapshots.available_cash IS '可用现金';
-COMMENT ON COLUMN account_snapshots.total_pnl IS '总盈亏';
-COMMENT ON COLUMN account_snapshots.total_return_pct IS '总收益率 (%)';
-COMMENT ON COLUMN account_snapshots.sharpe_ratio IS '夏普比率';
-COMMENT ON COLUMN account_snapshots.max_drawdown IS '最大回撤 (%)';
-COMMENT ON COLUMN account_snapshots.positions_summary IS '当前所有持仓的快照（JSON格式）';
-COMMENT ON COLUMN account_snapshots.ai_decision_id IS '关联的AI决策ID';
-
-
--- ============================================
--- 5. 交易记录表
+-- 4. 交易记录表
 -- ============================================
 
 CREATE TABLE trades (

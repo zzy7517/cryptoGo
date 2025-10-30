@@ -109,22 +109,27 @@ class PositionRepository(BaseRepository[Position]):
     ) -> Optional[Position]:
         """
         平仓
-        
+
         Args:
             position_id: 持仓 ID
             exit_price: 出场价格
             exit_order_id: 出场订单 ID
-            
+
         Returns:
             更新后的持仓或 None
         """
         position = self.get_by_id(position_id)
         if not position:
             return None
-        
+
         # 计算已实现盈亏
-        realized_pnl = (exit_price - position.entry_price) * position.quantity * position.leverage
-        
+        # 做多: (出场价 - 入场价) * 数量 * 杠杆
+        # 做空: (入场价 - 出场价) * 数量 * 杠杆
+        if position.side == 'long':
+            realized_pnl = (exit_price - position.entry_price) * position.quantity * position.leverage
+        else:  # short
+            realized_pnl = (position.entry_price - exit_price) * position.quantity * position.leverage
+
         updated = self.update(
             position_id,
             status="closed",
@@ -133,15 +138,16 @@ class PositionRepository(BaseRepository[Position]):
             unrealized_pnl=Decimal(0),
             exit_order_id=exit_order_id
         )
-        
+
         if updated:
             logger.info(
                 "持仓已平仓",
                 position_id=position_id,
                 symbol=position.symbol,
+                side=position.side,
                 realized_pnl=realized_pnl
             )
-        
+
         return updated
     
     def get_total_pnl(

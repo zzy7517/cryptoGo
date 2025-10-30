@@ -94,18 +94,6 @@ export default function TradingPage() {
     fetchActiveSession();
   }, [fetchActiveSession]);
 
-  // 检测URL参数，如果有 startSession=true 则自动打开对话框（仅客户端）
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('startSession') === 'true' && !activeSession) {
-        setShowSessionDialog(true);
-        // 清除 URL 参数，避免刷新页面时重复弹窗
-        window.history.replaceState({}, '', window.location.pathname);
-      }
-    }
-  }, [activeSession]);
-
   // 轮询获取 Agent 状态
   useEffect(() => {
     if (!activeSession?.session_id) {

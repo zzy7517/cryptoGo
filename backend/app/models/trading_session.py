@@ -36,18 +36,6 @@ class TradingSession(Base):
     total_trades = Column(Integer, default=0, comment="总交易次数")
     winning_trades = Column(Integer, default=0, comment="盈利交易次数")
     losing_trades = Column(Integer, default=0, comment="亏损交易次数")
-    win_rate = Column(Numeric(5, 2), comment="胜率 (%)")
-    
-    # 杠杆和置信度统计
-    avg_leverage = Column(Numeric(5, 2), comment="平均杠杆倍数")
-    avg_confidence = Column(Numeric(5, 4), comment="平均置信度 (0-1)")
-    biggest_win = Column(Numeric(20, 4), comment="最大单笔盈利")
-    biggest_loss = Column(Numeric(20, 4), comment="最大单笔亏损")
-    
-    # 持仓时间分布
-    long_time_pct = Column(Numeric(5, 2), comment="做多时间占比 (%)")
-    short_time_pct = Column(Numeric(5, 2), comment="做空时间占比 (%)")
-    flat_time_pct = Column(Numeric(5, 2), comment="空仓时间占比 (%)")
     
     # 配置信息
     config = Column(JSONB, comment="运行配置（JSON格式）")

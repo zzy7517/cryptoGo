@@ -158,23 +158,10 @@ class TradeRepository(BaseRepository[Trade]):
         
         total_pnl = sum([t.pnl for t in trades if t.pnl]) or Decimal(0)
         
-        biggest_win = max([t.pnl for t in trades if t.pnl], default=Decimal(0))
-        biggest_loss = min([t.pnl for t in trades if t.pnl], default=Decimal(0))
-        
-        win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
-        
-        avg_leverage = (
-            sum([t.leverage for t in trades]) / total_trades
-        ) if total_trades > 0 else 0
-        
         return {
             "total_trades": total_trades,
             "winning_trades": winning_trades,
             "losing_trades": losing_trades,
-            "win_rate": win_rate,
-            "total_pnl": total_pnl,
-            "biggest_win": biggest_win,
-            "biggest_loss": biggest_loss,
-            "avg_leverage": avg_leverage
+            "total_pnl": total_pnl
         }
 

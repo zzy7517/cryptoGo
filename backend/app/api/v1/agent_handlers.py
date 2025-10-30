@@ -100,32 +100,35 @@ async def start_background_agent(
     request: RunAgentRequest
 ):
     """
-    启动后台挂机 Agent
-    
-    Agent 将在后台线程中持续运行，按设定的间隔自动执行决策
-    
-    Args:
-        session_id: 会话 ID
-        request: 配置参数，包含 decision_interval（秒）
+    启动后台交易 Agent（挂机模式）
+
+    工作流程:
+    1. 验证交易会话是否存在且状态为 running
+    2. 获取后台 Agent 管理器（单例模式）
+    3. 创建并启动后台线程，线程中循环执行决策周期
+    4. 返回启动成功的结果
+
     """
+    # 记录启动日志
     logger.info(
         "启动后台 Agent",
         session_id=session_id,
         symbols=request.symbols
     )
-    
-    # 验证会话存在
+
+    # 步骤1: 验证会话存在且状态正确
     db = next(get_db())
     try:
         session_repo = TradingSessionRepository(db)
         session = session_repo.get_by_id(session_id)
-        
+
+        # 会话不存在，返回 404 错误
         if not session:
             raise HTTPException(
                 status_code=404,
                 detail=f"会话 {session_id} 不存在"
             )
-        
+
         if session.status != "running":
             raise HTTPException(
                 status_code=400,
@@ -133,31 +136,41 @@ async def start_background_agent(
             )
     finally:
         db.close()
-    
+
     try:
+        # 步骤2: 获取全局单例的后台 Agent 管理器
+        # 管理器负责维护所有运行中的后台 Agent
         manager = get_background_agent_manager()
-        
-        # 决策间隔，默认 5 分钟
+
+        # 步骤3: 解析决策间隔参数
+        # 从 risk_params 中获取 decision_interval，默认 300 秒（5 分钟）
         decision_interval = request.risk_params.get("decision_interval", 300) if request.risk_params else 300
-        
+
+        # 步骤4: 启动后台 Agent
+        # 这会创建一个新的后台线程，在线程中循环执行 AI 决策
         result = manager.start_background_agent(
-            session_id=session_id,
-            symbols=request.symbols,
-            risk_params=request.risk_params,
-            decision_interval=decision_interval,
-            max_iterations=request.max_iterations
+            session_id=session_id,           # 会话 ID
+            symbols=request.symbols,          # 交易对列表
+            risk_params=request.risk_params,  # 风险参数
+            decision_interval=decision_interval,  # 决策间隔（秒）
+            max_iterations=request.max_iterations  # 单次决策最大迭代次数
         )
-        
+
+        # 步骤5: 返回成功结果
         return {
             "success": True,
             "message": "后台 Agent 已启动",
-            "data": result
+            "data": result  # 包含 Agent 的详细信息
         }
-        
+
     except ValueError as e:
+        # ValueError 通常表示业务逻辑错误（如 Agent 已存在）
+        # 返回 400 Bad Request
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        # 捕获所有其他异常，记录错误日志
         logger.exception(f"启动后台 Agent 失败: {session_id}")
+        # 返回 500 Internal Server Error
         raise HTTPException(
             status_code=500,
             detail=f"启动失败: {str(e)}"
@@ -247,8 +260,7 @@ async def test_agent(request: RunAgentRequest):
                 "max_position_size": 0.2,
                 "stop_loss_pct": 0.05,
                 "take_profit_pct": 0.10,
-                "max_leverage": 3,
-                "max_positions": 3
+                "max_leverage": 3
             },
             max_iterations=request.max_iterations
         )

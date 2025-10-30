@@ -54,14 +54,6 @@ session_router.add_api_route(
     summary="获取会话详细信息"
 )
 
-# POST /api/v1/session/{session_id}/snapshot - 创建账户快照
-session_router.add_api_route(
-    "/{session_id}/snapshot",
-    session_handlers.create_snapshot,
-    methods=["POST"],
-    summary="创建账户快照"
-)
-
 
 # ============================================
 # Agent 路由

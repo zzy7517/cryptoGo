@@ -23,9 +23,9 @@ class Position(Base):
     session_id = Column(BigInteger, ForeignKey('trading_sessions.id', ondelete='CASCADE'), comment="所属交易会话ID")
     
     # 基本信息
-    symbol = Column(String(20), nullable=False, comment="交易对符号")
-    side = Column(String(10), nullable=False, comment="持仓方向: long, short")
-    status = Column(String(20), default="active", comment="状态: active, closed")
+    symbol = Column(String(20), nullable=False, comment="交易对符号") # 交易对，如 BTC/USDT:USDT
+    side = Column(String(10), nullable=False, comment="持仓方向: long, short") # 做多，做空
+    status = Column(String(20), default="active", comment="状态: active, closed") # 活跃，已平仓
     
     # 持仓详情
     quantity = Column(Numeric(20, 8), nullable=False, comment="持仓数量")

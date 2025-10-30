@@ -172,13 +172,13 @@ async def get_session_details(
 ):
     """
     获取会话详细信息
-    
+
     返回指定会话的完整信息，包括持仓、交易、决策等。
     """
     try:
         service = TradingSessionService(db)
         details = service.get_session_details(session_id)
-        
+
         return {
             "success": True,
             "data": details
@@ -188,36 +188,4 @@ async def get_session_details(
     except Exception as e:
         logger.error(f"获取会话详情失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"获取会话详情失败: {str(e)}")
-
-
-async def create_snapshot(
-    session_id: int,
-    total_value: float = Body(..., description="账户总价值"),
-    available_cash: float = Body(..., description="可用现金"),
-    positions_summary: Optional[Dict[str, Any]] = Body(None, description="持仓汇总"),
-    db: Session = Depends(get_db)
-):
-    """
-    创建账户快照
-    
-    记录指定会话的账户状态快照。
-    """
-    try:
-        service = TradingSessionService(db)
-        service.create_snapshot(
-            session_id=session_id,
-            total_value=total_value,
-            available_cash=available_cash,
-            positions_summary=positions_summary
-        )
-        
-        return {
-            "success": True,
-            "message": "快照已创建"
-        }
-    except BusinessException as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"创建快照失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"创建快照失败: {str(e)}")
 

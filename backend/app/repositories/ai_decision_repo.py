@@ -29,7 +29,8 @@ class AIDecisionRepository(BaseRepository[AIDecision]):
         prompt_data: Dict[str, Any],
         ai_response: str,
         reasoning: Optional[str] = None,
-        suggested_actions: Optional[List[Dict]] = None
+        suggested_actions: Optional[List[Dict]] = None,
+        executed: bool = False
     ) -> AIDecision:
         """
         保存 AI 决策
@@ -43,6 +44,7 @@ class AIDecisionRepository(BaseRepository[AIDecision]):
             ai_response: AI 的原始回复
             reasoning: AI 的推理过程
             suggested_actions: 建议的具体操作
+            executed: 是否已执行 (默认 False)
             
         Returns:
             创建的 AIDecision 实例
@@ -56,7 +58,8 @@ class AIDecisionRepository(BaseRepository[AIDecision]):
                 prompt_data=prompt_data,
                 ai_response=ai_response,
                 reasoning=reasoning,
-                suggested_actions=suggested_actions or []
+                suggested_actions=suggested_actions or [],
+                executed=executed
             )
             
             logger.info(
