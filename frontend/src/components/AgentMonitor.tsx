@@ -1,7 +1,7 @@
 /**
- * Agent Monitor Component
+ * Agent Monitor Component（定时循环版本）
  * 实时监控交易代理状态
- * 创建时间: 2025-10-29
+ * 更新时间: 2025-10-30
  */
 'use client';
 
@@ -14,7 +14,6 @@ interface AgentMonitorProps {
 
 export default function AgentMonitor({ sessionId }: AgentMonitorProps) {
   const [agentStatus, setAgentStatus] = useState<any>(null);
-  const [recentDecisions, setRecentDecisions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -66,7 +65,7 @@ export default function AgentMonitor({ sessionId }: AgentMonitorProps) {
 
   return (
     <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-      <h3 className="text-sm font-medium text-gray-700 mb-4">Agent 监控</h3>
+      <h3 className="text-sm font-medium text-gray-700 mb-4">Agent 监控（定时循环）</h3>
       
       <div className="space-y-3">
         {/* 状态指示器 */}
@@ -74,66 +73,80 @@ export default function AgentMonitor({ sessionId }: AgentMonitorProps) {
           <div className={`w-2 h-2 rounded-full ${
             agentStatus.status === 'running' ? 'bg-green-500 animate-pulse' :
             agentStatus.status === 'stopping' ? 'bg-yellow-500' :
+            agentStatus.status === 'starting' ? 'bg-blue-500 animate-pulse' :
             'bg-gray-500'
           }`}></div>
           <span className="text-sm font-bold text-gray-800">
             {agentStatus.status === 'running' ? '运行中' :
              agentStatus.status === 'stopping' ? '停止中' :
+             agentStatus.status === 'starting' ? '启动中' :
+             agentStatus.status === 'crashed' ? '已崩溃' :
              agentStatus.status}
           </span>
         </div>
 
-        {/* 当前节点 */}
+        {/* 运行模式 */}
         <div className="flex justify-between text-sm">
-          <span className="text-gray-600">当前节点</span>
-          <span className="font-mono text-teal-600 font-medium">{agentStatus.current_node}</span>
+          <span className="text-gray-600">运行模式</span>
+          <span className="font-mono text-teal-600 font-medium">定时循环</span>
         </div>
 
         {/* 循环次数 */}
         <div className="flex justify-between text-sm">
           <span className="text-gray-600">循环次数</span>
-          <span className="font-bold text-gray-800">{agentStatus.loop_count}</span>
+          <span className="font-bold text-gray-800">{agentStatus.run_count || 0}</span>
         </div>
 
         {/* 决策间隔 */}
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-600">决策间隔</span>
-          <span className="font-bold text-gray-800">{agentStatus.decision_interval}秒</span>
-        </div>
+        {agentStatus.config?.decision_interval && (
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">决策间隔</span>
+            <span className="font-bold text-gray-800">{agentStatus.config.decision_interval}秒</span>
+          </div>
+        )}
 
         {/* 交易对 */}
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-600">监控币种</span>
-          <div className="flex flex-wrap gap-1 justify-end">
-            {agentStatus.symbols?.map((symbol: string) => (
-              <span key={symbol} className="text-xs bg-teal-50 text-teal-700 px-2 py-1 rounded font-medium">
-                {symbol}
-              </span>
-            ))}
+        {agentStatus.config?.symbols && agentStatus.config.symbols.length > 0 && (
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">监控币种</span>
+            <div className="flex flex-wrap gap-1 justify-end">
+              {agentStatus.config.symbols.map((symbol: string) => (
+                <span key={symbol} className="text-xs bg-teal-50 text-teal-700 px-2 py-1 rounded font-medium">
+                  {symbol}
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* 最后更新时间 */}
-        {agentStatus.last_loop_time && (
+        {/* 最后运行时间 */}
+        {agentStatus.last_run_time && (
           <div className="flex justify-between text-sm">
             <span className="text-gray-600">最后循环</span>
             <span className="text-xs text-gray-500 font-medium">
-              {new Date(agentStatus.last_loop_time).toLocaleTimeString('zh-CN')}
+              {new Date(agentStatus.last_run_time).toLocaleTimeString('zh-CN')}
             </span>
           </div>
         )}
 
         {/* 错误信息 */}
-        {agentStatus.error_count > 0 && (
+        {agentStatus.last_error && (
           <div className="mt-2 p-3 bg-red-50 border border-red-300 rounded-lg">
             <div className="text-xs text-red-600 font-bold mb-1">
-              错误次数: {agentStatus.error_count}
+              发生错误
             </div>
-            {agentStatus.last_error && (
-              <div className="text-xs text-gray-600 break-words">
-                {agentStatus.last_error}
-              </div>
-            )}
+            <div className="text-xs text-gray-600 break-words">
+              {agentStatus.last_error}
+            </div>
+          </div>
+        )}
+
+        {/* 崩溃提示 */}
+        {agentStatus.status === 'crashed' && (
+          <div className="mt-2 p-3 bg-orange-50 border border-orange-300 rounded-lg">
+            <div className="text-xs text-orange-600 font-bold">
+              ⚠️ Agent 已崩溃，请重新启动
+            </div>
           </div>
         )}
 
@@ -146,8 +159,17 @@ export default function AgentMonitor({ sessionId }: AgentMonitorProps) {
             </span>
           </div>
         )}
+
+        {/* 线程状态 */}
+        {agentStatus.is_alive !== undefined && (
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">线程状态</span>
+            <span className={`text-xs font-medium ${agentStatus.is_alive ? 'text-green-600' : 'text-red-600'}`}>
+              {agentStatus.is_alive ? '存活' : '已终止'}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
 }
-

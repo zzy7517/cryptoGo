@@ -29,24 +29,16 @@
 - [x] 创建 backend/app/core/config.py
 - [x] 创建 Pydantic schemas
 
-### Phase 3: 前端K线图
+### Phase 3: 前端交易监控
 - [x] 创建 frontend/.env.local
-- [x] 创建 CandlestickChart.tsx（Lightweight Charts）
-- [x] 蜡烛图 + 成交量柱状图
-- [x] 实时K线更新
-- [x] 十字线、缩放、拖拽、响应式
-- [x] Market Store（Zustand）状态管理
+- [x] Session Store（Zustand）状态管理
 - [x] React Query 数据获取和缓存
-- [x] 创建交易终端页面 /trading
-- [x] 交易对选择 + 时间周期切换
-- [x] 实时价格显示
-- [x] 24h涨跌幅显示
-- [x] 24h最高价/最低价/成交量
-- [x] 定时轮询更新（30秒K线，5秒价格）
-- [x] 价格变化动画（涨绿跌红）
-- [x] 技术指标计算（EMA、MACD、RSI、ATR）
-- [x] 技术指标展示组件
-- [x] 合约数据展示组件
+- [x] 创建交易监控页面 /trading
+- [x] 会话管理（开始/结束会话）
+- [x] Agent控制（启动/停止Agent）
+- [x] AI决策记录展示
+- [x] 持仓监控展示
+- [x] Agent状态显示
 
 ---
 
@@ -54,6 +46,7 @@
 
 ### Phase 3: 前端优化（可选）
 - [ ] WebSocket 替代 HTTP 轮询
+- [ ] 市场看板页面（K线图、技术指标等）- 可选功能
 
 ### Phase 4: AI决策引擎
 - [x] 选择 LLM 方案（DeepSeek）

@@ -220,25 +220,59 @@ async def startup_event():
 async def shutdown_event():
     """应用关闭事件"""
     logger.info(f"👋 {settings.APP_NAME} 正在关闭...")
+    logger.info("=" * 80)
     
-    # 停止所有后台运行的 Agent
+    # 停止所有后台运行的 Agent 并关闭对应的会话
     try:
         from app.services.trading_agent_service import get_background_agent_manager
+        from app.services.trading_session_service import TradingSessionService
+        from app.utils.database import get_db
+        
         manager = get_background_agent_manager()
         running_agents = manager.list_agents()
+        logger.info(f"📌 找到 {len(running_agents)} 个运行中的 Agent")
         
-        for agent_status in running_agents:
+        for idx, agent_status in enumerate(running_agents, 1):
             if agent_status:
                 session_id = agent_status['session_id']
-                logger.info(f"停止后台 Agent (Session {session_id})...")
+                logger.info("=" * 80)
+                logger.info(f"🔧 处理 Agent [{idx}/{len(running_agents)}] (Session {session_id})...")
+                logger.info(f"   状态: {agent_status.get('status')}")
+                logger.info(f"   运行次数: {agent_status.get('run_count')}")
+                logger.info(f"   线程存活: {agent_status.get('is_alive')}")
+                
                 try:
+                    # 停止 Agent
+                    logger.info(f"⏹️ 调用 stop_background_agent({session_id})...")
                     manager.stop_background_agent(session_id)
+                    logger.info(f"✅ stop_background_agent 返回成功")
+                    
+                    # 关闭会话
+                    logger.info(f"💾 开始关闭会话 {session_id}...")
+                    db = next(get_db())
+                    try:
+                        session_service = TradingSessionService(db)
+                        session_service.end_session(
+                            session_id=session_id,
+                            status='stopped',
+                            notes='应用关闭时自动结束'
+                        )
+                        logger.info(f"✅ 会话 {session_id} 已关闭")
+                    except Exception as e:
+                        logger.error(f"❌ 关闭会话 {session_id} 失败: {str(e)}")
+                    finally:
+                        db.close()
+                        
                 except Exception as e:
-                    logger.error(f"停止 Agent 失败: {str(e)}")
+                    logger.error(f"❌ 停止 Agent/会话失败: {str(e)}")
+                    logger.exception("详细错误信息:")
         
-        logger.info("所有后台 Agent 已停止")
+        logger.info("=" * 80)
+        logger.info("✅ 所有后台 Agent 和会话已停止")
+        logger.info("=" * 80)
     except Exception as e:
-        logger.error(f"关闭 Agent 失败: {str(e)}")
+        logger.error(f"❌ 关闭过程失败: {str(e)}")
+        logger.exception("详细错误信息:")
 
 
 if __name__ == "__main__":

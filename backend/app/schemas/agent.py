@@ -2,6 +2,7 @@
 Agent 相关的 schemas
 用于 Agent 运行、决策、状态管理等
 创建时间: 2025-10-29
+更新时间: 2025-10-30（移除 LangChain，改用定时循环）
 """
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
@@ -9,7 +10,7 @@ from datetime import datetime
 
 
 class RunAgentRequest(BaseModel):
-    """运行 Agent 请求"""
+    """运行 Agent 请求（定时循环版本）"""
     symbols: List[str] = Field(
         default=["BTC/USDT:USDT"],
         description="交易对列表"
@@ -17,12 +18,6 @@ class RunAgentRequest(BaseModel):
     risk_params: Optional[Dict[str, Any]] = Field(
         default=None,
         description="风险参数，包含 max_position_size, stop_loss_pct, take_profit_pct 等"
-    )
-    max_iterations: int = Field(
-        default=10,
-        ge=1,
-        le=20,
-        description="最大迭代次数"
     )
     model: str = Field(
         default="deepseek-chat",
@@ -63,26 +58,14 @@ class BackgroundAgentStatus(BaseModel):
 
 
 class StartBackgroundAgentRequest(BaseModel):
-    """启动后台 Agent 请求"""
+    """启动后台 Agent 请求（定时循环模式）"""
     symbols: List[str] = Field(
         default=["BTC/USDT:USDT"],
         description="交易对列表"
     )
     risk_params: Optional[Dict[str, Any]] = Field(
         default=None,
-        description="风险参数"
-    )
-    decision_interval: int = Field(
-        default=300,
-        ge=60,
-        le=3600,
-        description="决策间隔（秒），默认 5 分钟"
-    )
-    max_iterations: int = Field(
-        default=10,
-        ge=1,
-        le=20,
-        description="每次决策的最大迭代次数"
+        description="风险参数，可包含 decision_interval 字段自定义决策间隔"
     )
     model: str = Field(
         default="deepseek-chat",

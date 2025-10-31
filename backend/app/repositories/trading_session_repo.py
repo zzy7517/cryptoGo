@@ -75,9 +75,11 @@ class TradingSessionRepository(BaseRepository[TradingSession]):
         Returns:
             TradingSession: 新创建的会话
         """
+        initial_cap = Decimal(str(initial_capital)) if initial_capital else None
         return self.create(
             session_name=session_name,
-            initial_capital=Decimal(str(initial_capital)) if initial_capital else None,
+            initial_capital=initial_cap,
+            current_capital=initial_cap,  # 初始时 current_capital = initial_capital
             config=config,
             status='running'
         )
@@ -117,8 +119,11 @@ class TradingSessionRepository(BaseRepository[TradingSession]):
             update_data['total_pnl'] = Decimal(str(total_pnl))
             
         if final_capital and session.initial_capital:
+            # 将所有值转换为 float 进行计算，然后转回 Decimal
+            final_cap_float = float(final_capital) if isinstance(final_capital, Decimal) else final_capital
+            initial_cap_float = float(session.initial_capital)
             update_data['total_return_pct'] = Decimal(str(
-                (final_capital - float(session.initial_capital)) / float(session.initial_capital) * 100
+                (final_cap_float - initial_cap_float) / initial_cap_float * 100
             ))
         
         return self.update(session_id, **update_data)

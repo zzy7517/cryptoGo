@@ -26,6 +26,7 @@ class TradingSession(Base):
     
     # 初始状态
     initial_capital = Column(Numeric(20, 4), comment="初始资金")
+    current_capital = Column(Numeric(20, 4), comment="当前资金（实时更新）")
     
     # 最终统计
     final_capital = Column(Numeric(20, 4), comment="最终资金")

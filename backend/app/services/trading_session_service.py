@@ -52,7 +52,10 @@ class TradingSessionService:
         # 检查是否已有活跃会话
         active_session = self.session_repo.get_active_session()
         if active_session:
-            return active_session
+            raise BusinessException(
+                f"已存在活跃会话 (ID: {active_session.id}, 名称: {active_session.session_name})，请先结束该会话",
+                error_code="ACTIVE_SESSION_EXISTS"
+            )
         
         # 生成会话名称
         if not session_name:

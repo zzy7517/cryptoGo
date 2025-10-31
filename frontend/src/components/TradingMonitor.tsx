@@ -9,6 +9,7 @@ import React, { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { sessionApi, agentApi } from '@/lib/api';
 import AgentMonitor from './AgentMonitor';
+import ChatPanel from './ChatPanel';
 
 interface TradingMonitorProps {
   sessionId: number;
@@ -227,70 +228,9 @@ export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
         )}
       </div>
 
-      {/* 决策记录 */}
-      <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">AI 决策记录</h3>
-        {decisions.length > 0 ? (
-          <div className="space-y-4 max-h-96 overflow-y-auto custom-scrollbar">
-            {decisions.slice(0, 20).map((decision: any) => (
-              <div 
-                key={decision.id} 
-                className="border border-gray-200 rounded-lg p-4 hover:border-teal-300 transition-colors"
-              >
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <span className="text-sm font-semibold text-gray-700">{decision.symbol}</span>
-                    <span className="ml-3 text-xs text-gray-500">{formatTime(decision.created_at)}</span>
-                  </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                    decision.action === 'buy' 
-                      ? 'bg-green-100 text-green-700' 
-                      : decision.action === 'sell'
-                      ? 'bg-red-100 text-red-700'
-                      : 'bg-gray-100 text-gray-700'
-                  }`}>
-                    {decision.action === 'buy' ? '买入' : decision.action === 'sell' ? '卖出' : '持有'}
-                  </span>
-                </div>
-                
-                {decision.reasoning && (
-                  <div className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 mb-2">
-                    <div className="font-medium text-gray-700 mb-1">决策理由：</div>
-                    {decision.reasoning}
-                  </div>
-                )}
-                
-                {decision.market_analysis && (
-                  <div className="text-xs text-gray-500 mt-2">
-                    <span className="font-medium">市场分析：</span>
-                    {typeof decision.market_analysis === 'string' 
-                      ? decision.market_analysis 
-                      : JSON.stringify(decision.market_analysis).substring(0, 100) + '...'}
-                  </div>
-                )}
-                
-                <div className="flex gap-4 mt-3 text-xs text-gray-500">
-                  {decision.confidence && (
-                    <div>
-                      <span className="font-medium">信心度：</span>
-                      <span className="font-bold text-teal-600">{formatNumber(decision.confidence * 100, 0)}%</span>
-                    </div>
-                  )}
-                  {decision.suggested_amount && (
-                    <div>
-                      <span className="font-medium">建议金额：</span>
-                      <span className="font-bold">${formatNumber(decision.suggested_amount, 2)}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-8 text-gray-400">
-            暂无决策记录
-          </div>
-        )}
+      {/* AI 聊天记录 */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-[600px]">
+        <ChatPanel sessionId={sessionId} />
       </div>
 
       {/* 自定义滚动条样式 */}

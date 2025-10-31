@@ -54,6 +54,14 @@ session_router.add_api_route(
     summary="获取会话详细信息"
 )
 
+# GET /api/v1/session/{session_id}/ai-decisions - 获取AI决策记录
+session_router.add_api_route(
+    "/{session_id}/ai-decisions",
+    session_handlers.get_ai_decisions,
+    methods=["GET"],
+    summary="获取会话的AI决策记录"
+)
+
 
 # ============================================
 # Agent 路由

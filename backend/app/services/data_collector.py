@@ -54,6 +54,7 @@ class ExchangeConnector:
             # 如果使用测试网
             if settings.BINANCE_TESTNET and self.exchange_id == 'binance':
                 config['options']['defaultType'] = 'future'
+                config['options']['testnet'] = True  # 关键：告诉CCXT使用测试网
                 config['urls'] = {
                     'api': {
                         'public': 'https://testnet.binancefuture.com/fapi/v1',

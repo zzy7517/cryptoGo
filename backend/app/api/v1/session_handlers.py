@@ -189,3 +189,47 @@ async def get_session_details(
         logger.error(f"获取会话详情失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"获取会话详情失败: {str(e)}")
 
+
+async def get_ai_decisions(
+    session_id: int,
+    limit: int = Query(50, ge=1, le=200, description="返回数量"),
+    db: Session = Depends(get_db)
+):
+    """
+    获取会话的AI决策记录
+
+    返回指定会话的AI决策历史，包含完整的prompt数据、AI推理过程和决策结果。
+    用于前端展示聊天记录。
+    """
+    try:
+        from app.repositories.ai_decision_repo import AIDecisionRepository
+
+        decision_repo = AIDecisionRepository(db)
+        decisions = decision_repo.get_by_session(session_id, limit=limit)
+
+        # 转换为前端友好的格式
+        decisions_data = []
+        for d in decisions:
+            decisions_data.append({
+                "id": d.id,
+                "created_at": d.created_at.isoformat(),
+                "symbols": d.symbols,
+                "decision_type": d.decision_type,
+                "confidence": float(d.confidence) if d.confidence else None,
+                "prompt_data": d.prompt_data,  # 用户输入（市场数据）
+                "ai_response": d.ai_response,  # AI原始回复
+                "reasoning": d.reasoning,  # AI推理过程
+                "suggested_actions": d.suggested_actions,  # 建议操作
+                "executed": d.executed,
+                "execution_result": d.execution_result
+            })
+
+        return {
+            "success": True,
+            "data": decisions_data,
+            "count": len(decisions_data)
+        }
+    except Exception as e:
+        logger.error(f"获取AI决策记录失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取AI决策记录失败: {str(e)}")
+

@@ -30,6 +30,7 @@ CREATE TABLE trading_sessions (
     
     -- 初始状态
     initial_capital NUMERIC(20, 4),
+    current_capital NUMERIC(20, 4),
     
     -- 最终统计（会话结束时计算）
     final_capital NUMERIC(20, 4),
@@ -57,6 +58,7 @@ COMMENT ON TABLE trading_sessions IS '交易会话表 - 记录每次运行实例
 COMMENT ON COLUMN trading_sessions.session_name IS '会话名称（可选）';
 COMMENT ON COLUMN trading_sessions.status IS '会话状态: running, stopped, crashed, completed';
 COMMENT ON COLUMN trading_sessions.initial_capital IS '初始资金';
+COMMENT ON COLUMN trading_sessions.current_capital IS '当前资金（实时更新）';
 COMMENT ON COLUMN trading_sessions.final_capital IS '最终资金';
 COMMENT ON COLUMN trading_sessions.total_pnl IS '总盈亏';
 COMMENT ON COLUMN trading_sessions.total_return_pct IS '总收益率 (%)';

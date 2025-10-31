@@ -2,72 +2,29 @@
 
 /**
  * 交易终端页面 (Trading Terminal Page)
- * 
- * 核心页面：加密货币交易终端主界面，集成所有交易相关的数据展示和交互功能
- * 修改时间: 2025-10-29 (优化UI布局和按钮命名，修复hydration错误)
- * 
+ *
+ * 核心页面：AI自动交易监控界面，专注于交易决策和持仓管理
+ * 修改时间: 2025-10-31 (移除市场看板，聚焦自动交易)
+ *
  * 路由：
  * - 访问路径: /trading
- * - URL参数: ?startSession=true (自动打开开始交易对话框，仅客户端处理)
- * 
+ *
  * 主要功能：
- * 1. 交易对选择 - 支持多个币种永续合约
- * 2. 时间周期切换 - 1分钟、5分钟、15分钟、1小时、4小时、1天
- * 3. K线图表展示 - 使用 Lightweight Charts 渲染专业图表
- * 4. 实时价格监控 - 5秒刷新一次
- * 5. 24小时统计数据 - 最高价、最低价、成交量
- * 6. 订单簿信息 - 买一价、卖一价、价差
- * 7. 技术指标面板 - EMA、MACD、RSI、ATR
- * 8. 合约数据展示 - 资金费率、持仓量
- * 
- * 数据获取策略：
- * - K线数据：30秒自动刷新
- * - 实时价格：5秒自动刷新
- * - 技术指标：30秒自动刷新
- * - 资金费率/持仓量：60秒自动刷新
- * 
+ * 1. 交易会话管理 - 开始/结束交易会话
+ * 2. AI代理控制 - 启动/停止自动交易代理
+ * 3. 交易监控 - 查看AI决策、持仓、资金变化
+ * 4. 会话配置 - 初始资金、决策间隔等参数设置
+ *
  * 状态管理：
- * - 使用 Zustand 管理全局状态（交易对、时间周期、数据）
- * - 使用 React Query 管理异步数据获取和缓存
- * 
- * UI特性：
- * - 响应式布局（桌面端4列网格，移动端单列）
- * - 价格变化动画（涨绿跌红）
- * - 自定义滚动条样式
- * - 暗色主题设计
+ * - 使用 Zustand 管理会话状态
+ * - 定时轮询 Agent 运行状态
  */
 import React, { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import TradingMonitor from '@/components/TradingMonitor';
-import MarketView from '@/components/MarketView';
-import { useMarketStore } from '@/stores/marketStore';
 import { useSessionStore } from '@/stores/sessionStore';
-import { marketApi, agentApi } from '@/lib/api';
-import { TRADING_PAIRS, getCoinName } from '@/config/tradingPairs';
-import type { TimeInterval } from '@/types/market';
-
-const INTERVALS: { value: TimeInterval; label: string }[] = [
-  { value: '1m', label: '1分钟' },
-  { value: '5m', label: '5分钟' },
-  { value: '15m', label: '15分钟' },
-  { value: '1h', label: '1小时' },
-  { value: '4h', label: '4小时' },
-  { value: '1d', label: '1天' },
-];
+import { agentApi } from '@/lib/api';
 
 export default function TradingPage() {
-  const {
-    currentSymbol,
-    currentInterval,
-    klineData,
-    tickerData,
-    previousPrice,
-    setCurrentSymbol,
-    setCurrentInterval,
-    setKlineData,
-    setTickerData,
-  } = useMarketStore();
-
   const {
     activeSession,
     isLoading: sessionLoading,
@@ -78,16 +35,12 @@ export default function TradingPage() {
     clearError,
   } = useSessionStore();
 
-  const [priceAnimation, setPriceAnimation] = useState<'up' | 'down' | null>(null);
   const [showSessionDialog, setShowSessionDialog] = useState(false);
   const [sessionName, setSessionName] = useState('');
   const [initialCapital, setInitialCapital] = useState('10000');
   const [autoStartAgent, setAutoStartAgent] = useState(true);
   const [decisionInterval, setDecisionInterval] = useState('60');
   const [agentStatus, setAgentStatus] = useState<any>(null);
-  
-  // Tab切换状态：'monitor' - 交易监控, 'market' - 市场行情
-  const [activeTab, setActiveTab] = useState<'monitor' | 'market'>('monitor');
 
   // 页面加载时获取活跃会话
   useEffect(() => {
@@ -121,104 +74,18 @@ export default function TradingPage() {
     return () => clearInterval(interval);
   }, [activeSession]);
 
-  // 获取K线数据
-  const { data: klineResponse, refetch: refetchKlines } = useQuery({
-    queryKey: ['klines', currentSymbol, currentInterval],
-    queryFn: () => marketApi.getKlines(currentSymbol, currentInterval, 100),
-    refetchInterval: 30000, // 30秒自动刷新
-  });
-
-  // 获取实时价格
-  const { data: ticker, refetch: refetchTicker } = useQuery({
-    queryKey: ['ticker', currentSymbol],
-    queryFn: () => marketApi.getTicker(currentSymbol),
-    refetchInterval: 5000, // 5秒自动刷新
-  });
-
-  // 获取技术指标
-  const { data: indicators, isLoading: indicatorsLoading } = useQuery({
-    queryKey: ['indicators', currentSymbol, currentInterval],
-    queryFn: () => marketApi.getIndicators(currentSymbol, currentInterval, 100, false),
-    refetchInterval: 30000, // 30秒自动刷新
-  });
-
-  // 获取资金费率
-  const { data: fundingRate, isLoading: fundingLoading } = useQuery({
-    queryKey: ['fundingRate', currentSymbol],
-    queryFn: () => marketApi.getFundingRate(currentSymbol),
-    refetchInterval: 60000, // 60秒自动刷新
-  });
-
-  // 获取持仓量
-  const { data: openInterest, isLoading: openInterestLoading } = useQuery({
-    queryKey: ['openInterest', currentSymbol],
-    queryFn: () => marketApi.getOpenInterest(currentSymbol),
-    refetchInterval: 60000, // 60秒自动刷新
-  });
-
-  // 更新K线数据
-  useEffect(() => {
-    if (klineResponse?.data) {
-      setKlineData(klineResponse.data);
-    }
-  }, [klineResponse, setKlineData]);
-
-  // 更新实时价格
-  useEffect(() => {
-    if (ticker) {
-      setTickerData(ticker);
-    }
-  }, [ticker, setTickerData]);
-
-  // 价格变化动画
-  useEffect(() => {
-    if (tickerData && previousPrice !== null) {
-      if (tickerData.last > previousPrice) {
-        setPriceAnimation('up');
-      } else if (tickerData.last < previousPrice) {
-        setPriceAnimation('down');
-      }
-      
-      const timer = setTimeout(() => setPriceAnimation(null), 500);
-      return () => clearTimeout(timer);
-    }
-  }, [tickerData, previousPrice]);
-
-  const handleSymbolChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setCurrentSymbol(e.target.value);
-  };
-
-  const handleIntervalChange = (interval: TimeInterval) => {
-    setCurrentInterval(interval);
-  };
-
-  const formatNumber = (num: number | null | undefined, decimals: number = 2): string => {
-    if (num === null || num === undefined) return '--';
-    return num.toLocaleString('en-US', {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals,
-    });
-  };
-
-  const formatVolume = (num: number | null | undefined): string => {
-    if (num === null || num === undefined) return '--';
-    if (num >= 1000000) return `${(num / 1000000).toFixed(2)}M`;
-    if (num >= 1000) return `${(num / 1000).toFixed(2)}K`;
-    return num.toFixed(2);
-  };
-
   const handleStartSession = async () => {
     try {
       const session = await startSession(
         sessionName || undefined,
         initialCapital ? parseFloat(initialCapital) : undefined
       );
-      
+
       // 如果勾选了自动启动 Agent
       if (autoStartAgent && session?.session_id) {
         try {
           await agentApi.startAgent(session.session_id, {
-            symbols: [currentSymbol],
+            symbols: ['BTC/USDT'],
             risk_params: {
               decision_interval: parseInt(decisionInterval),
             },
@@ -227,7 +94,7 @@ export default function TradingPage() {
           console.error('启动 Agent 失败:', error);
         }
       }
-      
+
       setShowSessionDialog(false);
       setSessionName('');
       setInitialCapital('10000');
@@ -249,41 +116,6 @@ export default function TradingPage() {
     }
   };
 
-  const handleStartAgent = async () => {
-    if (!activeSession?.session_id) {
-      alert('请先开始交易会话');
-      return;
-    }
-    
-    try {
-      await agentApi.startAgent(activeSession.session_id, {
-        symbols: [currentSymbol],
-        risk_params: {
-          decision_interval: parseInt(decisionInterval),
-        },
-      });
-    } catch (error) {
-      console.error('启动 Agent 失败:', error);
-      alert('启动 Agent 失败: ' + (error as any).message);
-    }
-  };
-
-  const handleStopAgent = async () => {
-    if (!activeSession?.session_id) {
-      alert('请先开始交易会话');
-      return;
-    }
-    
-    if (!confirm('确定要停止交易代理吗？')) return;
-    
-    try {
-      await agentApi.stopAgent(activeSession.session_id);
-      setAgentStatus(null);
-    } catch (error) {
-      console.error('停止 Agent 失败:', error);
-      alert('停止 Agent 失败: ' + (error as any).message);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
@@ -292,13 +124,13 @@ export default function TradingPage() {
         <div className="mb-6 flex justify-between items-start">
           <div>
             <h1 className="text-4xl font-bold text-gray-800 mb-2">
-              CryptoGo 市场看板
+              CryptoGo 交易监控
             </h1>
-            <p className="text-gray-500">实时加密货币交易数据与AI智能分析</p>
+            <p className="text-gray-500">AI自动交易决策与持仓监控</p>
           </div>
-          
+
           {/* 会话控制区域 */}
-          {activeSession && (
+          {activeSession ? (
             <div className="flex items-center gap-4">
               <div className="bg-white rounded-lg p-4 border border-green-300 shadow-sm">
                 <div className="flex items-center gap-3">
@@ -319,30 +151,15 @@ export default function TradingPage() {
                       <div className="text-xs mt-2 space-y-1">
                         <div className="flex items-center gap-2">
                           <div className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-pulse"></div>
-                          <span className="text-teal-600">Agent 运行中</span>
+                          <span className="text-teal-600">Agent 运行中（定时循环）</span>
                         </div>
                         <div className="text-gray-500">
-                          循环次数: {agentStatus.loop_count} | 间隔: {agentStatus.decision_interval}秒
+                          循环次数: {agentStatus.run_count || 0} | 间隔: {agentStatus.config?.decision_interval || '未知'}秒
                         </div>
                       </div>
                     )}
                   </div>
                   <div className="flex flex-col gap-2">
-                    {agentStatus ? (
-                      <button
-                        onClick={handleStopAgent}
-                        className="px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
-                      >
-                        停止 Agent
-                      </button>
-                    ) : (
-                      <button
-                        onClick={handleStartAgent}
-                        className="px-4 py-2 bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
-                      >
-                        启动 Agent
-                      </button>
-                    )}
                     <button
                       onClick={handleEndSession}
                       disabled={sessionLoading}
@@ -354,6 +171,13 @@ export default function TradingPage() {
                 </div>
               </div>
             </div>
+          ) : (
+            <button
+              onClick={() => setShowSessionDialog(true)}
+              className="px-6 py-3 bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700 text-white rounded-lg font-semibold transition-all shadow-sm"
+            >
+              开始交易
+            </button>
           )}
         </div>
 
@@ -471,120 +295,11 @@ export default function TradingPage() {
           </div>
         )}
 
-        {/* Tab切换栏和控制面板 */}
-        <div className="bg-white rounded-lg p-6 mb-6 shadow-sm border border-gray-200">
-          {/* Tab 切换 */}
-          {activeSession && (
-            <div className="flex gap-3 mb-6 border-b border-gray-200">
-              <button
-                onClick={() => setActiveTab('monitor')}
-                className={`px-6 py-3 font-semibold transition-all relative ${
-                  activeTab === 'monitor'
-                    ? 'text-teal-600'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                交易监控
-                {activeTab === 'monitor' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-600"></div>
-                )}
-              </button>
-              <button
-                onClick={() => setActiveTab('market')}
-                className={`px-6 py-3 font-semibold transition-all relative ${
-                  activeTab === 'market'
-                    ? 'text-teal-600'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                市场行情
-                {activeTab === 'market' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-teal-500 to-cyan-600"></div>
-                )}
-              </button>
-            </div>
-          )}
-          
-          {/* 控制面板 - 仅在市场行情Tab显示 */}
-          {(activeTab === 'market' || !activeSession) && (
-            <div className="flex flex-wrap items-center gap-6">
-              {/* 交易对选择 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">交易对</label>
-                <select
-                  value={currentSymbol}
-                  onChange={handleSymbolChange}
-                  className="bg-gray-50 border border-gray-300 rounded-lg px-4 py-2 text-gray-800 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 cursor-pointer min-w-[200px] font-medium transition-colors"
-                >
-                  {TRADING_PAIRS.map((pair) => (
-                    <option key={pair.symbol} value={pair.symbol} className="bg-white">
-                      {pair.symbol} - {pair.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 时间周期选择 */}
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-2">时间周期</label>
-                <div className="flex gap-2 flex-wrap">
-                  {INTERVALS.map((interval) => (
-                    <button
-                      key={interval.value}
-                      onClick={() => handleIntervalChange(interval.value)}
-                      className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                        currentInterval === interval.value
-                          ? 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white shadow-sm'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {interval.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 主要内容区域 - 根据Tab切换 */}
-        {activeSession && activeTab === 'monitor' ? (
-          // 交易监控视图
+        {/* 主要内容区域 - 交易监控 */}
+        {activeSession && (
           <TradingMonitor sessionId={activeSession.session_id} />
-        ) : (
-          // 市场行情视图
-          <MarketView
-            klineData={klineData}
-            currentSymbol={currentSymbol}
-            tickerData={tickerData}
-            priceAnimation={priceAnimation}
-            indicators={indicators}
-            indicatorsLoading={indicatorsLoading}
-            fundingRate={fundingRate}
-            openInterest={openInterest}
-            fundingLoading={fundingLoading}
-            openInterestLoading={openInterestLoading}
-          />
         )}
       </div>
-
-      {/* 自定义滚动条样式 */}
-      <style jsx global>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 8px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: #f3f4f6;
-          border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: linear-gradient(180deg, #14b8a6, #06b6d4);
-          border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: linear-gradient(180deg, #0d9488, #0891b2);
-        }
-      `}</style>
     </div>
   );
 }

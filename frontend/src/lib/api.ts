@@ -66,7 +66,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9527';
 
 const apiClient = axios.create({
   baseURL: API_URL,
-  timeout: 10000,
+  timeout: 10000, // 10秒超时
 });
 
 export const marketApi = {
@@ -142,18 +142,24 @@ export const marketApi = {
 
 /**
  * Agent API
- * 交易代理控制 API (更新以匹配新的后端 API)
+ * 交易代理控制 API
+ * 更新时间: 2025-10-30
  */
 export const agentApi = {
   /**
    * 运行一次决策周期（单次执行）
+   * 
+   * 工作流程：
+   * 1. 预先收集所有数据（账户、持仓、市场数据）
+   * 2. 一次性调用 AI 进行分析
+   * 3. AI 返回结构化的决策列表
+   * 4. 执行决策并保存到数据库
    */
   runOnce: async (
     sessionId: number,
     params: {
       symbols?: string[];
       risk_params?: Record<string, any>;
-      max_iterations?: number;
       model?: string;
     }
   ): Promise<any> => {
@@ -165,14 +171,17 @@ export const agentApi = {
   },
 
   /**
-   * 启动后台挂机代理
+   * 启动后台挂机代理（定时循环模式）
+   * 
+   * 使用定时循环机制，每个周期独立执行：
+   * - 默认间隔：180秒（3分钟）
+   * - 可通过 risk_params.decision_interval 自定义间隔
    */
   startAgent: async (
     sessionId: number,
     params: {
       symbols?: string[];
-      risk_params?: Record<string, any>;
-      max_iterations?: number;
+      risk_params?: Record<string, any>; // 可包含 decision_interval 字段
       model?: string;
     }
   ): Promise<any> => {
@@ -213,11 +222,11 @@ export const agentApi = {
 
   /**
    * 测试 Agent（不需要真实会话）
+   * 用于快速测试 Agent 功能，使用模拟会话
    */
   testAgent: async (params: {
     symbols?: string[];
     risk_params?: Record<string, any>;
-    max_iterations?: number;
     model?: string;
   }): Promise<any> => {
     const response = await apiClient.post('/api/v1/agent/test', params);
@@ -254,6 +263,19 @@ export const sessionApi = {
     limit?: number;
   }): Promise<any> => {
     const response = await apiClient.get('/api/v1/session/list', { params });
+    return response.data;
+  },
+
+  /**
+   * 获取会话的AI决策记录
+   */
+  getAIDecisions: async (
+    sessionId: number,
+    limit?: number
+  ): Promise<any> => {
+    const response = await apiClient.get(`/api/v1/session/${sessionId}/ai-decisions`, {
+      params: { limit }
+    });
     return response.data;
   },
 };
