@@ -16,7 +16,10 @@ from pathlib import Path
 from app.services.data_collector import get_exchange_connector
 from app.services.ai_engine import get_ai_engine
 from app.services.prompt_builder import build_advanced_prompt
+from app.services.binance_trader import create_binance_trader_from_config, BinanceTrader
+from app.services.abstract_trader import PositionSide as TraderPositionSide
 from app.repositories.position_repo import PositionRepository
+from app.repositories.trade_repo import TradeRepository
 from app.repositories.ai_decision_repo import AIDecisionRepository
 from app.repositories.trading_session_repo import TradingSessionRepository
 from app.utils.database import get_db
@@ -223,7 +226,7 @@ async def get_ai_decision(
 
 async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any]:
     """
-    执行单个决策
+    执行单个决策（使用真实交易）
     
     Args:
         decision: 决策对象
@@ -238,52 +241,159 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
         db = next(get_db())
         try:
             position_repo = PositionRepository(db)
-            exchange = get_exchange_connector()
+            trade_repo = TradeRepository(db)
+            
+            # 创建币安交易器
+            trader = create_binance_trader_from_config()
             
             # 根据不同的 action 执行不同的操作
             if decision.action == "open_long":
-                # 开多仓
+                # 获取当前价格用于计算数量
+                exchange = get_exchange_connector()
                 ticker = exchange.get_ticker(decision.symbol)
-                entry_price = ticker.get('last')
+                current_price = ticker.get('last')
                 
                 # 计算购买数量
-                quantity = decision.position_size_usd / entry_price if entry_price > 0 else 0
+                quantity = decision.position_size_usd / current_price if current_price > 0 else 0
                 
+                if quantity <= 0:
+                    return {"success": False, "error": "数量无效"}
+                
+                # 计算止损止盈价格
+                stop_loss_price = None
+                take_profit_price = None
+                if decision.stop_loss_pct:
+                    stop_loss_price = current_price * (1 - decision.stop_loss_pct / 100)
+                if decision.take_profit_pct:
+                    take_profit_price = current_price * (1 + decision.take_profit_pct / 100)
+                
+                # 执行开多仓交易
+                logger.info(f"📈 开多仓: {decision.symbol} 数量={quantity:.6f}")
+                order_result = trader.open_long(
+                    symbol=decision.symbol,
+                    quantity=quantity,
+                    leverage=decision.leverage,
+                    stop_loss_price=stop_loss_price,
+                    take_profit_price=take_profit_price
+                )
+                
+                if not order_result.success:
+                    logger.error(f"❌ 开多仓失败: {order_result.error}")
+                    return {"success": False, "error": order_result.error}
+                
+                # 创建持仓记录
                 position = position_repo.create_position(
                     session_id=session_id,
                     symbol=decision.symbol,
                     side='long',
-                    quantity=Decimal(str(quantity)),
-                    entry_price=Decimal(str(entry_price)),
+                    quantity=Decimal(str(order_result.filled_quantity or quantity)),
+                    entry_price=Decimal(str(order_result.avg_price or current_price)),
                     leverage=decision.leverage,
-                    stop_loss=Decimal(str(entry_price * (1 - decision.stop_loss_pct / 100))) if decision.stop_loss_pct else None,
-                    take_profit=Decimal(str(entry_price * (1 + decision.take_profit_pct / 100))) if decision.take_profit_pct else None
+                    stop_loss=Decimal(str(stop_loss_price)) if stop_loss_price else None,
+                    take_profit=Decimal(str(take_profit_price)) if take_profit_price else None,
+                    entry_order_id=int(order_result.order_id) if order_result.order_id and order_result.order_id.isdigit() else None
                 )
                 
-                logger.info(f"✅ 开多仓成功: {decision.symbol}, 仓位ID={position.id}")
-                return {"success": True, "action": "open_long", "position_id": position.id}
+                # 创建交易记录
+                trade = trade_repo.create_trade(
+                    session_id=session_id,
+                    symbol=decision.symbol,
+                    side='buy',
+                    quantity=Decimal(str(order_result.filled_quantity or quantity)),
+                    price=Decimal(str(order_result.avg_price or current_price)),
+                    total_value=Decimal(str((order_result.filled_quantity or quantity) * (order_result.avg_price or current_price))),
+                    order_type='market',
+                    leverage=decision.leverage,
+                    fee=Decimal(str(order_result.fee)) if order_result.fee else None,
+                    fee_currency=order_result.fee_currency,
+                    position_id=position.id,
+                    exchange_order_id=order_result.order_id
+                )
+                
+                logger.info(f"✅ 开多仓成功: {decision.symbol}, 仓位ID={position.id}, 交易ID={trade.id}")
+                return {
+                    "success": True,
+                    "action": "open_long",
+                    "position_id": position.id,
+                    "trade_id": trade.id,
+                    "order_id": order_result.order_id,
+                    "entry_price": float(order_result.avg_price or current_price),
+                    "quantity": float(order_result.filled_quantity or quantity)
+                }
                 
             elif decision.action == "open_short":
-                # 开空仓
+                # 获取当前价格用于计算数量
+                exchange = get_exchange_connector()
                 ticker = exchange.get_ticker(decision.symbol)
-                entry_price = ticker.get('last')
+                current_price = ticker.get('last')
                 
                 # 计算卖空数量
-                quantity = decision.position_size_usd / entry_price if entry_price > 0 else 0
+                quantity = decision.position_size_usd / current_price if current_price > 0 else 0
                 
+                if quantity <= 0:
+                    return {"success": False, "error": "数量无效"}
+                
+                # 计算止损止盈价格
+                stop_loss_price = None
+                take_profit_price = None
+                if decision.stop_loss_pct:
+                    stop_loss_price = current_price * (1 + decision.stop_loss_pct / 100)
+                if decision.take_profit_pct:
+                    take_profit_price = current_price * (1 - decision.take_profit_pct / 100)
+                
+                # 执行开空仓交易
+                logger.info(f"📉 开空仓: {decision.symbol} 数量={quantity:.6f}")
+                order_result = trader.open_short(
+                    symbol=decision.symbol,
+                    quantity=quantity,
+                    leverage=decision.leverage,
+                    stop_loss_price=stop_loss_price,
+                    take_profit_price=take_profit_price
+                )
+                
+                if not order_result.success:
+                    logger.error(f"❌ 开空仓失败: {order_result.error}")
+                    return {"success": False, "error": order_result.error}
+                
+                # 创建持仓记录
                 position = position_repo.create_position(
                     session_id=session_id,
                     symbol=decision.symbol,
                     side='short',
-                    quantity=Decimal(str(quantity)),
-                    entry_price=Decimal(str(entry_price)),
+                    quantity=Decimal(str(order_result.filled_quantity or quantity)),
+                    entry_price=Decimal(str(order_result.avg_price or current_price)),
                     leverage=decision.leverage,
-                    stop_loss=Decimal(str(entry_price * (1 + decision.stop_loss_pct / 100))) if decision.stop_loss_pct else None,
-                    take_profit=Decimal(str(entry_price * (1 - decision.take_profit_pct / 100))) if decision.take_profit_pct else None
+                    stop_loss=Decimal(str(stop_loss_price)) if stop_loss_price else None,
+                    take_profit=Decimal(str(take_profit_price)) if take_profit_price else None,
+                    entry_order_id=int(order_result.order_id) if order_result.order_id and order_result.order_id.isdigit() else None
                 )
                 
-                logger.info(f"✅ 开空仓成功: {decision.symbol}, 仓位ID={position.id}")
-                return {"success": True, "action": "open_short", "position_id": position.id}
+                # 创建交易记录
+                trade = trade_repo.create_trade(
+                    session_id=session_id,
+                    symbol=decision.symbol,
+                    side='sell',
+                    quantity=Decimal(str(order_result.filled_quantity or quantity)),
+                    price=Decimal(str(order_result.avg_price or current_price)),
+                    total_value=Decimal(str((order_result.filled_quantity or quantity) * (order_result.avg_price or current_price))),
+                    order_type='market',
+                    leverage=decision.leverage,
+                    fee=Decimal(str(order_result.fee)) if order_result.fee else None,
+                    fee_currency=order_result.fee_currency,
+                    position_id=position.id,
+                    exchange_order_id=order_result.order_id
+                )
+                
+                logger.info(f"✅ 开空仓成功: {decision.symbol}, 仓位ID={position.id}, 交易ID={trade.id}")
+                return {
+                    "success": True,
+                    "action": "open_short",
+                    "position_id": position.id,
+                    "trade_id": trade.id,
+                    "order_id": order_result.order_id,
+                    "entry_price": float(order_result.avg_price or current_price),
+                    "quantity": float(order_result.filled_quantity or quantity)
+                }
                 
             elif decision.action in ["close_long", "close_short"]:
                 # 平仓：查找对应的持仓
@@ -300,15 +410,54 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
                     logger.warning(f"⚠️ 未找到要平仓的持仓: {decision.symbol} {side}")
                     return {"success": False, "error": "持仓不存在"}
                 
-                # 获取当前价格
-                ticker = exchange.get_ticker(decision.symbol)
-                exit_price = ticker.get('last')
+                # 执行平仓交易
+                position_side = TraderPositionSide.LONG if side == "long" else TraderPositionSide.SHORT
+                logger.info(f"🔻 平仓: {decision.symbol} {side}")
+                order_result = trader.close_position(
+                    symbol=decision.symbol,
+                    position_side=position_side,
+                    quantity=float(target_position.quantity)
+                )
                 
-                # 平仓
-                position_repo.close_position(target_position.id, Decimal(str(exit_price)))
+                if not order_result.success:
+                    logger.error(f"❌ 平仓失败: {order_result.error}")
+                    return {"success": False, "error": order_result.error}
                 
-                logger.info(f"✅ 平仓成功: {decision.symbol} {side}, 仓位ID={target_position.id}")
-                return {"success": True, "action": decision.action, "position_id": target_position.id}
+                # 更新持仓记录
+                exit_price = Decimal(str(order_result.avg_price)) if order_result.avg_price else target_position.current_price
+                position_repo.close_position(
+                    target_position.id,
+                    exit_price,
+                    exit_order_id=int(order_result.order_id) if order_result.order_id and order_result.order_id.isdigit() else None
+                )
+                
+                # 创建交易记录
+                trade_side = 'sell' if side == 'long' else 'buy'
+                trade = trade_repo.create_trade(
+                    session_id=session_id,
+                    symbol=decision.symbol,
+                    side=trade_side,
+                    quantity=Decimal(str(order_result.filled_quantity or target_position.quantity)),
+                    price=exit_price,
+                    total_value=Decimal(str(float(order_result.filled_quantity or target_position.quantity) * float(exit_price))),
+                    order_type='market',
+                    leverage=target_position.leverage,
+                    fee=Decimal(str(order_result.fee)) if order_result.fee else None,
+                    fee_currency=order_result.fee_currency,
+                    position_id=target_position.id,
+                    exchange_order_id=order_result.order_id
+                )
+                
+                logger.info(f"✅ 平仓成功: {decision.symbol} {side}, 仓位ID={target_position.id}, 交易ID={trade.id}")
+                return {
+                    "success": True,
+                    "action": decision.action,
+                    "position_id": target_position.id,
+                    "trade_id": trade.id,
+                    "order_id": order_result.order_id,
+                    "exit_price": float(exit_price),
+                    "quantity": float(order_result.filled_quantity or target_position.quantity)
+                }
                 
             elif decision.action == "hold":
                 # 保持持仓不变
@@ -328,7 +477,7 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
             db.close()
             
     except Exception as e:
-        logger.error(f"❌ 执行决策失败: {e}")
+        logger.exception(f"❌ 执行决策失败: {e}")
         return {"success": False, "error": str(e)}
 
 
