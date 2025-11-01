@@ -18,14 +18,6 @@ class OrderSide(str, Enum):
     SELL = "sell"
 
 
-class OrderType(str, Enum):
-    """订单类型"""
-    MARKET = "market"
-    LIMIT = "limit"
-    STOP_MARKET = "stop_market"
-    STOP_LIMIT = "stop_limit"
-
-
 class PositionSide(str, Enum):
     """持仓方向（合约）- 仅支持双向持仓"""
     LONG = "long"
@@ -144,19 +136,6 @@ class AbstractExchange(ABC):
         pass
     
     @abstractmethod
-    def get_balance(self, currency: str = 'USDT') -> Dict[str, Any]:
-        """
-        获取账户余额
-        
-        Args:
-            currency: 币种
-            
-        Returns:
-            余额信息
-        """
-        pass
-    
-    @abstractmethod
     def get_positions(self, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         获取持仓信息
@@ -213,23 +192,6 @@ class AbstractExchange(ABC):
         """
         pass
     
-    @abstractmethod
-    def cancel_order(
-        self,
-        symbol: str,
-        order_id: str
-    ) -> bool:
-        """
-        取消订单
-        
-        Args:
-            symbol: 交易对
-            order_id: 订单ID
-            
-        Returns:
-            是否取消成功
-        """
-        pass
 
     # ==================== 杠杆和止损止盈 ====================
     
@@ -439,48 +401,6 @@ class AbstractExchange(ABC):
             logger.error(f"开空仓失败: {e}", symbol=symbol)
             return OrderResult(success=False, error=str(e))
     
-    def close_long(
-        self,
-        symbol: str,
-        quantity: Optional[float] = None
-    ) -> OrderResult:
-        """
-        平多仓的便捷方法
-        
-        Args:
-            symbol: 交易对
-            quantity: 平仓数量（None表示全部）
-            
-        Returns:
-            订单结果
-        """
-        return self.close_position(
-            symbol=symbol,
-            position_side=PositionSide.LONG,
-            quantity=quantity
-        )
-    
-    def close_short(
-        self,
-        symbol: str,
-        quantity: Optional[float] = None
-    ) -> OrderResult:
-        """
-        平空仓的便捷方法
-        
-        Args:
-            symbol: 交易对
-            quantity: 平仓数量（None表示全部）
-            
-        Returns:
-            订单结果
-        """
-        return self.close_position(
-            symbol=symbol,
-            position_side=PositionSide.SHORT,
-            quantity=quantity
-        )
-    
     # ==================== 市场数据相关 ====================
     
     @abstractmethod
@@ -529,20 +449,6 @@ class AbstractExchange(ABC):
             
         Returns:
             订单簿数据
-        """
-        pass
-    
-    @abstractmethod
-    def get_symbols(self, quote: str = 'USDT', active_only: bool = True) -> List[Dict[str, Any]]:
-        """
-        获取交易对列表
-        
-        Args:
-            quote: 计价货币
-            active_only: 是否只返回活跃的交易对
-            
-        Returns:
-            交易对列表
         """
         pass
     

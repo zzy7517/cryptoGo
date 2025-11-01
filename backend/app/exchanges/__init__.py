@@ -5,7 +5,6 @@
 from .base import (
     AbstractExchange,
     OrderSide,
-    OrderType,
     PositionSide,
     OrderResult
 )
@@ -15,7 +14,6 @@ from .factory import ExchangeFactory, create_default_exchange
 __all__ = [
     'AbstractExchange',
     'OrderSide',
-    'OrderType',
     'PositionSide',
     'OrderResult',
     'BinanceExchange',

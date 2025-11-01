@@ -8,7 +8,6 @@ from typing import Dict, Any, Optional, List
 from ..base import (
     AbstractExchange,
     OrderSide,
-    OrderType,
     PositionSide,
     OrderResult
 )
@@ -232,44 +231,6 @@ class BinanceExchange(AbstractExchange):
             logger.error(f"获取账户信息失败: {str(e)}")
             raise
     
-    def get_balance(self, currency: str = 'USDT') -> Dict[str, Any]:
-        """
-        获取账户余额
-        
-        Args:
-            currency: 币种
-            
-        Returns:
-            余额信息
-        """
-        try:
-            balances = self.client.get_account_balance()
-            
-            for balance in balances:
-                if balance.get('asset') == currency:
-                    return {
-                        'asset': balance.get('asset'),
-                        'walletBalance': float(balance.get('walletBalance', 0)),
-                        'unrealizedProfit': float(balance.get('unrealizedProfit', 0)),
-                        'marginBalance': float(balance.get('marginBalance', 0)),
-                        'availableBalance': float(balance.get('availableBalance', 0)),
-                        'maxWithdrawAmount': float(balance.get('maxWithdrawAmount', 0))
-                    }
-            
-            # 如果没找到该币种
-            return {
-                'asset': currency,
-                'walletBalance': 0,
-                'unrealizedProfit': 0,
-                'marginBalance': 0,
-                'availableBalance': 0,
-                'maxWithdrawAmount': 0
-            }
-            
-        except Exception as e:
-            logger.error(f"获取余额失败: {str(e)}")
-            raise
-    
     def get_positions(self, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         获取持仓信息
@@ -482,25 +443,6 @@ class BinanceExchange(AbstractExchange):
         except Exception as e:
             logger.error(f"创建限价单失败: {e}", symbol=symbol, side=side, price=price)
             return OrderResult(success=False, error=str(e))
-    
-    def cancel_order(self, symbol: str, order_id: str) -> bool:
-        """
-        取消订单
-        
-        Args:
-            symbol: 交易对
-            order_id: 订单ID
-            
-        Returns:
-            是否取消成功
-        """
-        try:
-            self.client.cancel_order(symbol, order_id=int(order_id))
-            logger.info(f"订单已取消", symbol=symbol, order_id=order_id)
-            return True
-        except Exception as e:
-            logger.error(f"取消订单失败: {e}", symbol=symbol, order_id=order_id)
-            return False
     
     def get_order_status(
         self,
@@ -768,19 +710,6 @@ class BinanceExchange(AbstractExchange):
             订单簿数据
         """
         return self.market_data.get_order_book(symbol, limit)
-    
-    def get_symbols(self, quote: str = 'USDT', active_only: bool = True) -> List[Dict[str, Any]]:
-        """
-        获取交易对列表
-        
-        Args:
-            quote: 计价货币
-            active_only: 是否只返回活跃的交易对
-            
-        Returns:
-            交易对列表
-        """
-        return self.market_data.get_symbols(quote, active_only)
     
     def get_funding_rate(self, symbol: str) -> Dict[str, Any]:
         """

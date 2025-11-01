@@ -4,6 +4,7 @@
 交易所类型通过配置自动选择
 创建时间: 2025-10-31
 更新时间: 2025-11-01 - 清理未使用的端点（保留 get_account_summary）
+更新时间: 2025-11-02 - 重构依赖关系，移除循环依赖
 
 注意：虽然 get_account_info 和 get_positions 的路由端点已删除，
 但底层 service 方法仍保留，因为它们被内部逻辑调用：
@@ -11,7 +12,7 @@
 - get_positions: 被 get_account_summary 内部调用
 """
 from fastapi import HTTPException
-from ...services.account_service import get_account_service
+from ...services.account_service import AccountService
 from ...utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -20,12 +21,12 @@ logger = get_logger(__name__)
 async def get_account_summary():
     """
     获取账户摘要
-    
+
     自动根据配置使用对应的交易所
     返回账户信息和持仓信息的完整摘要
     """
     try:
-        service = get_account_service()
+        service = AccountService.get_instance()
         summary = service.get_account_summary()
 
         return {

@@ -2,7 +2,9 @@
 交易所工厂
 根据配置创建对应的交易所实例
 使用工厂模式，支持动态创建不同交易所
+职责：只负责交易所实例的创建，不管理服务层
 创建时间: 2025-11-01
+修改时间: 2025-11-02 - 移除服务层依赖，专注于交易所实例创建
 """
 from typing import Dict, Any, Optional
 from .base import AbstractExchange
@@ -16,11 +18,15 @@ logger = get_logger(__name__)
 class ExchangeFactory:
     """
     交易所工厂类
-    
-    根据配置创建对应的交易所实例
-    使用工厂模式，使得交易所可以根据配置动态切换
+
+    职责：
+    1. 根据配置创建对应的交易所实例
+    2. 使用工厂模式，使得交易所可以根据配置动态切换
+    3. 支持单例模式，确保全局只有一个交易所实例
+
+    注意：不再管理服务层实例，服务层由 ServiceRegistry 统一管理
     """
-    
+
     # 注册的交易所类型
     _exchanges = {
         'binance': BinanceExchange,
@@ -28,6 +34,9 @@ class ExchangeFactory:
         # 'okx': OKXExchange,
         # 'bybit': BybitExchange,
     }
+
+    # 单例实例缓存（只缓存交易所实例）
+    _exchange_instance: Optional[AbstractExchange] = None
     
     @classmethod
     def register_exchange(cls, name: str, exchange_class: type):
@@ -127,11 +136,37 @@ class ExchangeFactory:
     def get_supported_exchanges(cls) -> list:
         """
         获取支持的交易所列表
-        
+
         Returns:
             交易所名称列表
         """
         return list(cls._exchanges.keys())
+
+    @classmethod
+    def get_trader(cls) -> AbstractExchange:
+        """
+        获取交易器单例（交易所实例）
+
+        自动根据配置（settings.EXCHANGE）创建对应的交易所实例
+        使用单例模式，确保全局只有一个实例
+
+        Returns:
+            交易所实例（AbstractExchange）
+        """
+        if cls._exchange_instance is None:
+            cls._exchange_instance = cls.create_exchange()
+            logger.info(f"交易器创建成功: {cls._exchange_instance.__class__.__name__}")
+        return cls._exchange_instance
+
+    @classmethod
+    def reset_instance(cls):
+        """
+        重置交易所单例实例
+
+        主要用于测试或需要重新创建实例的场景
+        """
+        cls._exchange_instance = None
+        logger.info("交易所实例已重置")
 
 
 # ==================== 便捷函数 ====================
@@ -139,12 +174,26 @@ class ExchangeFactory:
 def create_default_exchange() -> AbstractExchange:
     """
     创建默认交易所实例（从配置读取）
-    
+
     Returns:
         交易所实例
     """
     return ExchangeFactory.create_exchange()
 
 
-__all__ = ['ExchangeFactory', 'create_default_exchange']
+def get_trader() -> AbstractExchange:
+    """
+    获取交易器单例
+
+    Returns:
+        交易所实例
+    """
+    return ExchangeFactory.get_trader()
+
+
+__all__ = [
+    'ExchangeFactory',
+    'create_default_exchange',
+    'get_trader',
+]
 

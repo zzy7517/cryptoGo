@@ -1,7 +1,6 @@
 """
-AI 引擎服务 - DeepSeek 集成
-基于 DeepSeek API 的市场分析和交易决策引擎
-修改时间: 2025-10-29 (添加会话支持)
+llm service 
+创建时间: 2025-10-29
 """
 from openai import OpenAI
 from typing import Dict, Any, Optional, List
@@ -31,7 +30,7 @@ class LLMService:
         self.model = settings.DEEPSEEK_MODEL
         
         logger.info(
-            "成功初始化 AI 引擎",
+            "llm service initialized",
             model=self.model,
             base_url=settings.DEEPSEEK_BASE_URL
         )
@@ -44,7 +43,7 @@ class LLMService:
     ) -> str:
         try:
             logger.debug(
-                "调用 DeepSeek API",
+                "调用llm",
                 messages_count=len(messages),
                 temperature=temperature
             )
@@ -59,23 +58,18 @@ class LLMService:
             
             content = response.choices[0].message.content
 
-            logger.info(
-                "DeepSeek API 调用成功",
-            )
-            
             return content
             
         except Exception as e:
-            error_msg = f"DeepSeek API 调用失败: {str(e)}"
+            error_msg = f"llm call failed: {str(e)}"
             logger.exception(error_msg)
             raise Exception(error_msg) from e
 
 @lru_cache(maxsize=1)
 def get_llm() -> LLMService:
     """
-    获取 AI 引擎单例
+    get llm service singleton
     
-    使用 lru_cache 确保只创建一个实例，线程安全
     """
     return LLMService()
 

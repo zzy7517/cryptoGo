@@ -11,7 +11,7 @@ from ..repositories.trading_session_repo import TradingSessionRepository
 from ..repositories.trade_repo import TradeRepository
 from ..repositories.ai_decision_repo import AIDecisionRepository
 from ..models.trading_session import TradingSession
-from ..services.account_service import get_account_service
+from .account_service import AccountService
 from ..utils.logging import get_logger
 from ..utils.exceptions import BusinessException
 
@@ -20,13 +20,13 @@ logger = get_logger(__name__)
 
 class TradingSessionService:
     """交易会话服务"""
-    
+
     def __init__(self, db: Session):
         self.db = db
         self.session_repo = TradingSessionRepository(db)
         self.trade_repo = TradeRepository(db)
         self.decision_repo = AIDecisionRepository(db)
-        self.account_service = get_account_service()
+        self.account_service = AccountService.get_instance()
     
     def start_session(
         self,

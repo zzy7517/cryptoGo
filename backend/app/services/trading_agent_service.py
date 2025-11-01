@@ -1,5 +1,5 @@
 """
-Trading Agent Service - 定时循环版本（无 LangChain）
+Trading Agent Service
 核心逻辑：数据收集 -> AI分析决策 -> 执行交易 -> 记录保存
 创建时间: 2025-10-30
 """
@@ -7,18 +7,16 @@ Trading Agent Service - 定时循环版本（无 LangChain）
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 from decimal import Decimal
-import threading
 import time
 import asyncio
-import json
 from pathlib import Path
 
 from ..utils.data_collector import get_exchange
 from .llm_service import get_llm
 from ..llm.prompt_builder import build_user_prompt
-from .trader_service import get_trader
+from ..exchanges.factory import get_trader
 from ..exchanges.base import PositionSide as TraderPositionSide
-from ..llm.response_parser import ResponseParser, Decision as ParsedDecision
+from ..llm.response_parser import ResponseParser
 from ..repositories.trade_repo import TradeRepository
 from ..repositories.ai_decision_repo import AIDecisionRepository
 from ..repositories.trading_session_repo import TradingSessionRepository
@@ -118,10 +116,10 @@ async def build_system_prompt(risk_params: Dict[str, Any], session_id: int) -> s
     
     with open(prompt_file, 'r', encoding='utf-8') as f:
         template = f.read()
-    
-        # 获取账户净值
-        from .account_service import get_account_service
-    account_service = get_account_service()
+
+    # 获取账户净值
+    from .account_service import AccountService
+    account_service = AccountService.get_instance()
     account_info = account_service.get_account_info()
     account_equity = account_info.get('totalMarginBalance', 10000)  # 默认10000
     
@@ -1182,34 +1180,3 @@ def get_background_agent_manager() -> BackgroundAgentManager:
     
     return _background_manager
 
-
-# ==================== 便捷函数 ====================
-
-async def run_trading_agent(
-    session_id: int,
-    symbols: List[str],
-    risk_params: Optional[Dict[str, Any]] = None
-) -> Dict[str, Any]:
-    """
-    运行交易 Agent 的便捷函数（单次执行）
-    
-    Args:
-        session_id: 交易会话 ID
-        symbols: 交易对列表
-        risk_params: 风险参数
-        
-    Returns:
-        决策结果
-    """
-    if risk_params is None:
-        risk_params = {
-            "max_position_size": 0.2,
-            "stop_loss_pct": 0.05,
-            "take_profit_pct": 0.10,
-            "max_leverage": 3
-        }
-    
-    agent = TradingAgentService(session_id)
-    result = await agent.run_decision_cycle(symbols, risk_params)
-    
-    return result

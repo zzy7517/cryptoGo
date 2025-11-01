@@ -19,7 +19,13 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSessionStore } from '@/stores/sessionStore';
-import { configApi } from '@/lib/api';
+
+// 交易对配置（写死在前端）
+const TRADING_PAIRS = [
+  { symbol: 'BTC/USDT:USDT', name: '比特币', description: 'Bitcoin 永续合约' },
+  { symbol: 'ETH/USDT:USDT', name: '以太坊', description: 'Ethereum 永续合约' },
+  { symbol: 'DOGE/USDT:USDT', name: '狗狗币', description: 'Dogecoin 永续合约' }
+];
 
 export default function Home() {
   const router = useRouter();
@@ -30,9 +36,7 @@ export default function Home() {
   const [autoStartAgent, setAutoStartAgent] = useState(true);
   const [decisionInterval, setDecisionInterval] = useState('60');
   const [isChecking, setIsChecking] = useState(true);
-  const [tradingPairs, setTradingPairs] = useState<Array<{ symbol: string; name: string; description?: string }>>([]);
-  const [tradingPairsLoading, setTradingPairsLoading] = useState(true);
-  const [selectedSymbols, setSelectedSymbols] = useState<string[]>([]);
+  const [selectedSymbols, setSelectedSymbols] = useState<string[]>(TRADING_PAIRS.map(pair => pair.symbol));
 
   // 页面加载时检查是否有活跃会话
   useEffect(() => {
@@ -49,34 +53,6 @@ export default function Home() {
     checkActiveSession();
   }, [fetchActiveSession]);
 
-  // 获取后端配置的交易对
-  useEffect(() => {
-    const fetchTradingPairs = async () => {
-      try {
-        const response = await configApi.getTradingPairs();
-        if (response.success && response.data) {
-          setTradingPairs(response.data);
-          // 默认全选
-          setSelectedSymbols(response.data.map((pair: any) => pair.symbol));
-        }
-      } catch (error) {
-        console.error('获取交易对配置失败:', error);
-        // 使用默认配置作为 fallback
-        const defaultPairs = [
-          { symbol: 'BTC/USDT:USDT', name: '比特币', description: 'Bitcoin 永续合约' },
-          { symbol: 'ETH/USDT:USDT', name: '以太坊', description: 'Ethereum 永续合约' },
-          { symbol: 'DOGE/USDT:USDT', name: '狗狗币', description: 'Dogecoin 永续合约' }
-        ];
-        setTradingPairs(defaultPairs);
-        // 默认全选
-        setSelectedSymbols(defaultPairs.map(pair => pair.symbol));
-      } finally {
-        setTradingPairsLoading(false);
-      }
-    };
-
-    fetchTradingPairs();
-  }, []);
 
   // 如果有活跃会话，自动跳转到交易页面
   useEffect(() => {
@@ -131,10 +107,10 @@ export default function Home() {
 
   // 全选/取消全选
   const toggleSelectAll = () => {
-    if (selectedSymbols.length === tradingPairs.length) {
+    if (selectedSymbols.length === TRADING_PAIRS.length) {
       setSelectedSymbols([]);
     } else {
-      setSelectedSymbols(tradingPairs.map(pair => pair.symbol));
+      setSelectedSymbols(TRADING_PAIRS.map(pair => pair.symbol));
     }
   };
 
@@ -190,7 +166,7 @@ export default function Home() {
                 type="text"
                 value={sessionName}
                 onChange={(e) => setSessionName(e.target.value)}
-                placeholder="例如：BTC 波段交易策略"
+                placeholder="例如：xxx"
                 className="w-full bg-gray-50/80 border-2 border-gray-200 rounded-xl px-5 py-4 text-gray-800 placeholder:text-gray-400 focus:outline-none focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-100 transition-all duration-200"
               />
             </div>
@@ -277,41 +253,35 @@ export default function Home() {
                         onClick={toggleSelectAll}
                         className="text-xs text-teal-600 hover:text-teal-700 font-semibold"
                       >
-                        {selectedSymbols.length === tradingPairs.length ? '取消全选' : '全选'}
+                        {selectedSymbols.length === TRADING_PAIRS.length ? '取消全选' : '全选'}
                       </button>
                     </label>
-                    {tradingPairsLoading ? (
-                      <div className="bg-white rounded-xl px-4 py-3 border-2 border-gray-200">
-                        <p className="text-sm text-gray-500">加载中...</p>
+                    <div className="bg-white rounded-xl px-4 py-3 border-2 border-gray-200">
+                      <div className="flex flex-wrap gap-2">
+                        {TRADING_PAIRS.map((pair) => {
+                          const isSelected = selectedSymbols.includes(pair.symbol);
+                          return (
+                            <button
+                              key={pair.symbol}
+                              type="button"
+                              onClick={() => toggleSymbolSelection(pair.symbol)}
+                              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                                isSelected
+                                  ? 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white shadow-md'
+                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                              }`}
+                              title={pair.description}
+                            >
+                              {isSelected && <span>✓</span>}
+                              {pair.name}
+                            </button>
+                          );
+                        })}
                       </div>
-                    ) : (
-                      <div className="bg-white rounded-xl px-4 py-3 border-2 border-gray-200">
-                        <div className="flex flex-wrap gap-2">
-                          {tradingPairs.map((pair) => {
-                            const isSelected = selectedSymbols.includes(pair.symbol);
-                            return (
-                              <button
-                                key={pair.symbol}
-                                type="button"
-                                onClick={() => toggleSymbolSelection(pair.symbol)}
-                                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                                  isSelected
-                                    ? 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white shadow-md'
-                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                }`}
-                                title={pair.description}
-                              >
-                                {isSelected && <span>✓</span>}
-                                {pair.name}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <p className="text-xs text-gray-500 mt-2">
-                          已选择 {selectedSymbols.length} 个币种 · AI 将监控并自动交易选中的币种
-                        </p>
-                      </div>
-                    )}
+                      <p className="text-xs text-gray-500 mt-2">
+                        已选择 {selectedSymbols.length} 个币种 · AI 将监控并自动交易选中的币种
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}

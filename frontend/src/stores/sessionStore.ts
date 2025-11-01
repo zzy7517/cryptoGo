@@ -1,8 +1,10 @@
 /**
  * 交易会话状态管理
- * 2025-10-29
+ * 创建时间: 2025-10-29
+ * 更新时间: 2025-11-02 - 使用统一的 API 客户端，移除直接 fetch 调用
  */
 import { create } from 'zustand';
+import { sessionApi } from '@/lib/api';
 
 export interface TradingSession {
   session_id: number;
@@ -48,8 +50,6 @@ interface SessionState {
   reset: () => void;
 }
 
-const API_BASE_URL = 'http://localhost:9527/api/v1';
-
 export const useSessionStore = create<SessionState>((set, get) => ({
   activeSession: null,
   sessions: [],
@@ -59,20 +59,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   fetchActiveSession: async () => {
     set({ isLoading: true, error: null });
     try {
-      const response = await fetch(`${API_BASE_URL}/session/active`);
-      const result = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(result.detail || '获取活跃会话失败');
-      }
-      
-      set({ 
+      const result = await sessionApi.getActiveSession();
+
+      set({
         activeSession: result.data,
-        isLoading: false 
+        isLoading: false
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '未知错误';
-      set({ 
+      set({
         error: errorMessage,
         isLoading: false,
         activeSession: null
@@ -93,27 +88,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   ) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await fetch(`${API_BASE_URL}/session/start`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          session_name: sessionName,
-          initial_capital: initialCapital,
-          // Agent 配置参数
-          auto_start_agent: agentConfig?.auto_start_agent ?? true,
-          symbols: agentConfig?.symbols,
-          decision_interval: agentConfig?.decision_interval,
-          risk_params: agentConfig?.risk_params,
-        }),
+      const result = await sessionApi.startSession({
+        session_name: sessionName,
+        initial_capital: initialCapital,
+        auto_start_agent: agentConfig?.auto_start_agent ?? true,
+        symbols: agentConfig?.symbols,
+        decision_interval: agentConfig?.decision_interval,
+        risk_params: agentConfig?.risk_params,
       });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.detail || '开始会话失败');
-      }
 
       const newSession: TradingSession = result.data;
 
@@ -136,37 +118,25 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   endSession: async (sessionId?: number, status: string = 'completed', notes?: string) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await fetch(`${API_BASE_URL}/session/end`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          session_id: sessionId,
-          status: status,
-          notes: notes,
-        }),
+      await sessionApi.endSession({
+        session_id: sessionId,
+        status: status,
+        notes: notes,
       });
-      
-      const result = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(result.detail || '结束会话失败');
-      }
-      
+
       // 清空活跃会话
-      set({ 
+      set({
         activeSession: null,
-        isLoading: false 
+        isLoading: false
       });
-      
+
       // 刷新会话列表
       await get().fetchSessionList();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '未知错误';
-      set({ 
+      set({
         error: errorMessage,
-        isLoading: false 
+        isLoading: false
       });
       throw error;
     }
@@ -175,24 +145,18 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   fetchSessionList: async (status?: string, limit: number = 20) => {
     set({ isLoading: true, error: null });
     try {
-      const params = new URLSearchParams();
-      if (status) params.append('status', status);
-      params.append('limit', limit.toString());
-      
-      const response = await fetch(`${API_BASE_URL}/session/list?${params}`);
-      const result = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(result.detail || '获取会话列表失败');
-      }
-      
-      set({ 
+      const result = await sessionApi.getSessionList({
+        status,
+        limit
+      });
+
+      set({
         sessions: result.data || [],
-        isLoading: false 
+        isLoading: false
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '未知错误';
-      set({ 
+      set({
         error: errorMessage,
         isLoading: false,
         sessions: []

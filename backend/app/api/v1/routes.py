@@ -4,7 +4,7 @@
 更新时间: 2025-11-01（清理未使用的路由，保持精简）
 """
 from fastapi import APIRouter
-from . import session_handlers, agent_handlers, account_handlers, config_handlers
+from . import session_handlers, agent_handlers, account_handlers
 
 # 创建 v1 API 路由器
 api_v1_router = APIRouter(prefix="/api/v1")
@@ -113,25 +113,9 @@ account_router.add_api_route(
 
 
 # ============================================
-# Config 路由
-# ============================================
-config_router = APIRouter(prefix="/config", tags=["config"])
-
-# GET /api/v1/config/trading-pairs - 获取默认交易对配置
-config_router.add_api_route(
-    "/trading-pairs",
-    config_handlers.get_trading_pairs,
-    methods=["GET"],
-    summary="获取默认交易对配置",
-    response_model=config_handlers.TradingPairsResponse
-)
-
-
-# ============================================
 # 注册所有子路由到 v1 router
 # ============================================
 api_v1_router.include_router(session_router)
 api_v1_router.include_router(agent_router)
 api_v1_router.include_router(account_router)
-api_v1_router.include_router(config_router)
 
