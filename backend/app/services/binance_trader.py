@@ -36,16 +36,15 @@ class BinanceTrader(AbstractTrader):
     - 持仓查询
     """
     
-    def __init__(self, api_key: str, api_secret: str, testnet: bool = True):
+    def __init__(self, api_key: str, api_secret: str):
         """
         初始化币安交易器
         
         Args:
             api_key: 币安API密钥
             api_secret: 币安API密钥
-            testnet: 是否使用测试网
         """
-        super().__init__(api_key, api_secret, testnet)
+        super().__init__(api_key, api_secret)
         self.exchange: Optional[ccxt.binance] = None
         self.initialize()
     
@@ -57,6 +56,8 @@ class BinanceTrader(AbstractTrader):
             是否初始化成功
         """
         try:
+            from app.utils.config import settings
+            
             # 配置币安交易所
             config = {
                 'apiKey': self.api_key,
@@ -65,30 +66,26 @@ class BinanceTrader(AbstractTrader):
                 'options': {
                     'defaultType': 'future',  # 合约交易
                     'adjustForTimeDifference': True,  # 自动调整时间差
-                }
+                },
+                'timeout': 10000,  # 10秒超时
             }
             
-            # 如果使用测试网
-            if self.testnet:
-                config['options']['testnet'] = True
-                config['urls'] = {
-                    'api': {
-                        'public': 'https://testnet.binancefuture.com/fapi/v1',
-                        'private': 'https://testnet.binancefuture.com/fapi/v1',
-                    }
-                }
-                logger.info("使用币安合约测试网")
-            else:
-                logger.info("使用币安合约主网")
-            
+            # 添加代理配置
+            if settings.HTTP_PROXY or settings.HTTPS_PROXY:
+                config['proxies'] = {}
+                if settings.HTTP_PROXY:
+                    config['proxies']['http'] = settings.HTTP_PROXY
+                if settings.HTTPS_PROXY:
+                    config['proxies']['https'] = settings.HTTPS_PROXY
+                logger.debug(f"使用代理: {config['proxies']}")
+
             self.exchange = ccxt.binance(config)
-            
+
             # 测试连接
             self.exchange.load_markets()
             
             logger.info(
                 "币安交易器初始化成功",
-                testnet=self.testnet,
                 markets_count=len(self.exchange.markets)
             )
             
@@ -724,6 +721,5 @@ def create_binance_trader_from_config() -> BinanceTrader:
     
     return BinanceTrader(
         api_key=settings.BINANCE_API_KEY,
-        api_secret=settings.BINANCE_SECRET,
-        testnet=settings.BINANCE_TESTNET
+        api_secret=settings.BINANCE_SECRET
     )

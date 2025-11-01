@@ -40,9 +40,10 @@ class ExchangeConnector:
                 'enableRateLimit': True,
                 'options': {
                     'defaultType': 'future',  # 合约交易
-                }
+                },
+                'timeout': 10000,  # 10秒超时
             }
-            
+
             # 如果提供了 API 密钥，则添加认证信息
             if settings.BINANCE_API_KEY and settings.BINANCE_SECRET:
                 config['apiKey'] = settings.BINANCE_API_KEY
@@ -51,24 +52,21 @@ class ExchangeConnector:
             else:
                 logger.warning("未配置交易所 API 密钥，仅可使用公开接口")
             
-            # 如果使用测试网
-            if settings.BINANCE_TESTNET and self.exchange_id == 'binance':
-                config['options']['defaultType'] = 'future'
-                config['options']['testnet'] = True  # 关键：告诉CCXT使用测试网
-                config['urls'] = {
-                    'api': {
-                        'public': 'https://testnet.binancefuture.com/fapi/v1',
-                        'private': 'https://testnet.binancefuture.com/fapi/v1',
-                    }
-                }
-                logger.info("使用币安测试网")
-            
+            # 添加代理配置
+            if settings.HTTP_PROXY or settings.HTTPS_PROXY:
+                config['proxies'] = {}
+                if settings.HTTP_PROXY:
+                    config['proxies']['http'] = settings.HTTP_PROXY
+                if settings.HTTPS_PROXY:
+                    config['proxies']['https'] = settings.HTTPS_PROXY
+                logger.debug(f"使用代理: {config['proxies']}")
+
             self.exchange = exchange_class(config)
+
             logger.info(
                 "成功初始化交易所",
                 exchange=self.exchange_id,
-                rate_limit=config['enableRateLimit'],
-                testnet=settings.BINANCE_TESTNET
+                rate_limit=config['enableRateLimit']
             )
             
         except AttributeError:
@@ -153,9 +151,52 @@ class ExchangeConnector:
             logger.exception(error_msg, symbol=symbol, interval=interval, exception_type=type(e).__name__)
             raise DataFetchException(error_msg, details={"symbol": symbol, "interval": interval}) from e
     
+    def get_order_book(self, symbol: str, limit: int = 5) -> Dict[str, Any]:
+        """
+        获取订单簿数据（更可靠的方式获取bid/ask）
+        
+        Args:
+            symbol: 交易对，如 'BTC/USDT'
+            limit: 深度级别
+        
+        Returns:
+            订单簿数据
+        """
+        try:
+            orderbook = self.exchange.fetch_order_book(symbol, limit=limit)
+            
+            # 提取最佳买卖价
+            best_bid = orderbook['bids'][0][0] if orderbook.get('bids') and len(orderbook['bids']) > 0 else None
+            best_ask = orderbook['asks'][0][0] if orderbook.get('asks') and len(orderbook['asks']) > 0 else None
+            
+            result = {
+                'symbol': symbol,
+                'bid': float(best_bid) if best_bid else None,
+                'ask': float(best_ask) if best_ask else None,
+                'bids': [[float(price), float(amount)] for price, amount in orderbook.get('bids', [])[:limit]],
+                'asks': [[float(price), float(amount)] for price, amount in orderbook.get('asks', [])[:limit]],
+                'timestamp': int(orderbook.get('timestamp', datetime.now().timestamp() * 1000))
+            }
+            
+            logger.debug("成功获取订单簿", symbol=symbol, bid=result['bid'], ask=result['ask'])
+            return result
+            
+        except ccxt.NetworkError as e:
+            error_msg = f"获取订单簿网络错误"
+            logger.debug(error_msg, symbol=symbol, error=str(e))
+            raise DataFetchException(f"{error_msg}: {str(e)}", details={"symbol": symbol}) from e
+        except ccxt.BaseError as e:
+            # 可能是测试网限制或API错误，不抛出异常，返回None让调用者处理
+            logger.debug(f"订单簿API错误（可能是测试网限制）: {str(e)[:100]}", symbol=symbol)
+            return {'symbol': symbol, 'bid': None, 'ask': None, 'bids': [], 'asks': [], 'timestamp': int(datetime.now().timestamp() * 1000)}
+        except Exception as e:
+            error_msg = f"获取订单簿失败"
+            logger.debug(error_msg, symbol=symbol, error=str(e)[:100])
+            return {'symbol': symbol, 'bid': None, 'ask': None, 'bids': [], 'asks': [], 'timestamp': int(datetime.now().timestamp() * 1000)}
+    
     def get_ticker(self, symbol: str) -> Dict[str, Any]:
         """
-        获取实时行情数据
+        获取实时行情数据（增强版 - 结合ticker和订单簿）
         
         Args:
             symbol: 交易对，如 'BTC/USDT'
@@ -173,11 +214,27 @@ class ExchangeConnector:
                 change = ticker['last'] - ticker['open']
                 percentage = (change / ticker['open']) * 100
             
+            # 如果ticker没有bid/ask，从订单簿获取
+            bid = float(ticker['bid']) if ticker.get('bid') else None
+            ask = float(ticker['ask']) if ticker.get('ask') else None
+            
+            # 如果ticker中缺少bid/ask，尝试从订单簿获取
+            if bid is None or ask is None:
+                try:
+                    orderbook = self.get_order_book(symbol, limit=1)
+                    if bid is None and orderbook.get('bid'):
+                        bid = orderbook['bid']
+                    if ask is None and orderbook.get('ask'):
+                        ask = orderbook['ask']
+                    logger.debug(f"从订单簿补充了bid/ask数据: bid={bid}, ask={ask}")
+                except Exception as e:
+                    logger.warning(f"获取订单簿补充bid/ask失败: {e}")
+            
             result = {
                 'symbol': symbol,
                 'last': float(ticker['last']) if ticker.get('last') else 0.0,
-                'bid': float(ticker['bid']) if ticker.get('bid') else None,
-                'ask': float(ticker['ask']) if ticker.get('ask') else None,
+                'bid': bid,
+                'ask': ask,
                 'high': float(ticker['high']) if ticker.get('high') else None,
                 'low': float(ticker['low']) if ticker.get('low') else None,
                 'volume': float(ticker['baseVolume']) if ticker.get('baseVolume') else None,
@@ -186,7 +243,7 @@ class ExchangeConnector:
                 'timestamp': int(ticker['timestamp']) if ticker.get('timestamp') else int(datetime.now().timestamp() * 1000)
             }
             
-            logger.debug("成功获取实时行情", symbol=symbol, price=result['last'])
+            logger.debug("成功获取实时行情", symbol=symbol, price=result['last'], bid=result.get('bid'), ask=result.get('ask'))
             return result
             
         except ccxt.RateLimitExceeded as e:

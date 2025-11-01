@@ -7,7 +7,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { sessionApi, agentApi } from '@/lib/api';
+import { sessionApi, agentApi, binanceApi } from '@/lib/api';
 import AgentMonitor from './AgentMonitor';
 import ChatPanel from './ChatPanel';
 
@@ -23,7 +23,15 @@ export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
     refetchInterval: 10000, // 每10秒刷新
   });
 
+  // 获取币安账户信息
+  const { data: binanceAccount } = useQuery({
+    queryKey: ['binanceAccount'],
+    queryFn: () => binanceApi.getAccountSummary(),
+    refetchInterval: 15000, // 每15秒刷新
+  });
+
   const details = sessionDetails?.data;
+  const binanceData = binanceAccount?.data;
 
   const formatNumber = (num: number | null | undefined, decimals: number = 2): string => {
     if (num === null || num === undefined) return '--';
@@ -67,54 +75,152 @@ export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
   const decisions = details.decisions || [];
 
   return (
-    <div className="space-y-6">
-      {/* Agent 监控卡片 */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <AgentMonitor sessionId={sessionId} />
-        </div>
-        
-        {/* 账户概览 */}
-        <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-          <h3 className="text-sm font-medium text-gray-700 mb-4">账户概览</h3>
-          <div className="space-y-3">
-            <div>
-              <div className="text-xs text-gray-500 mb-1">初始资金</div>
-              <div className="text-lg font-bold text-gray-800">
-                ${formatNumber(session?.initial_capital, 2)}
+    <div className="flex gap-6 h-[calc(100vh-180px)]">
+      {/* 左侧主内容区 */}
+      <div className="flex-1 space-y-6 overflow-y-auto pr-2">
+        {/* Agent 监控和账户概览 */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <AgentMonitor sessionId={sessionId} />
+          </div>
+
+          {/* 账户概览 */}
+          <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+            <h3 className="text-sm font-medium text-gray-700 mb-4">账户概览</h3>
+
+            {/* 会话账户信息 */}
+            <div className="space-y-3 mb-4 pb-4 border-b border-gray-200">
+              <div className="text-xs font-semibold text-gray-600 mb-2">会话账户</div>
+              <div>
+                <div className="text-xs text-gray-500 mb-1">初始资金</div>
+                <div className="text-lg font-bold text-gray-800">
+                  ${formatNumber(session?.initial_capital, 2)}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 mb-1">当前资金</div>
+                <div className="text-2xl font-bold text-teal-600">
+                  ${formatNumber(session?.final_capital || session?.initial_capital, 2)}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 mb-1">盈亏</div>
+                <div className={`text-xl font-bold ${
+                  (session?.total_pnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'
+                }`}>
+                  {(session?.total_pnl || 0) >= 0 ? '+' : ''}
+                  ${formatNumber(session?.total_pnl, 2)}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 mb-1">收益率</div>
+                <div className={`text-lg font-bold ${
+                  (session?.total_return_pct || 0) >= 0 ? 'text-green-500' : 'text-red-500'
+                }`}>
+                  {(session?.total_return_pct || 0) >= 0 ? '+' : ''}
+                  {formatNumber(session?.total_return_pct, 2)}%
+                </div>
               </div>
             </div>
-            <div>
-              <div className="text-xs text-gray-500 mb-1">当前资金</div>
-              <div className="text-2xl font-bold text-teal-600">
-                ${formatNumber(session?.final_capital || session?.initial_capital, 2)}
+
+            {/* 币安账户信息 */}
+            {binanceData?.account && (
+              <div className="space-y-3">
+                <div className="text-xs font-semibold text-gray-600 mb-2">币安账户 (Demo)</div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">总余额</div>
+                  <div className="text-lg font-bold text-blue-600">
+                    ${formatNumber(binanceData.account.totalWalletBalance, 2)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">可用余额</div>
+                  <div className="text-base font-semibold text-gray-700">
+                    ${formatNumber(binanceData.account.availableBalance, 2)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">未实现盈亏</div>
+                  <div className={`text-base font-bold ${
+                    (binanceData.account.totalUnrealizedProfit || 0) >= 0 ? 'text-green-500' : 'text-red-500'
+                  }`}>
+                    {(binanceData.account.totalUnrealizedProfit || 0) >= 0 ? '+' : ''}
+                    ${formatNumber(binanceData.account.totalUnrealizedProfit, 2)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">持仓数量</div>
+                  <div className="text-base font-semibold text-gray-700">
+                    {binanceData.positionsCount || 0}
+                  </div>
+                </div>
               </div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 mb-1">盈亏</div>
-              <div className={`text-xl font-bold ${
-                (session?.total_pnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'
-              }`}>
-                {(session?.total_pnl || 0) >= 0 ? '+' : ''}
-                ${formatNumber(session?.total_pnl, 2)}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 mb-1">收益率</div>
-              <div className={`text-lg font-bold ${
-                (session?.total_return_pct || 0) >= 0 ? 'text-green-500' : 'text-red-500'
-              }`}>
-                {(session?.total_return_pct || 0) >= 0 ? '+' : ''}
-                {formatNumber(session?.total_return_pct, 2)}%
-              </div>
-            </div>
+            )}
           </div>
         </div>
-      </div>
 
-      {/* 持仓信息 */}
-      <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">当前持仓</h3>
+        {/* 币安实时持仓 */}
+        {binanceData?.positions && binanceData.positions.length > 0 && (
+          <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">
+              币安实时持仓 <span className="text-sm font-normal text-gray-500">(Demo Trading)</span>
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">交易对</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">方向</th>
+                    <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">数量</th>
+                    <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">开仓价</th>
+                    <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">标记价</th>
+                    <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">盈亏</th>
+                    <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">收益率</th>
+                    <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">杠杆</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {binanceData.positions.map((position: any, index: number) => {
+                    const pnl = position.unrealizedProfit || 0;
+                    const pnlPct = position.unrealizedProfitPct || 0;
+                    return (
+                      <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <td className="py-3 px-4 font-medium text-gray-800">{position.symbol}</td>
+                        <td className="py-3 px-4">
+                          <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                            position.side === 'long'
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-red-100 text-red-700'
+                          }`}>
+                            {position.side === 'long' ? '多' : '空'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono">{formatNumber(position.quantity, 4)}</td>
+                        <td className="py-3 px-4 text-right font-mono">${formatNumber(position.entryPrice, 2)}</td>
+                        <td className="py-3 px-4 text-right font-mono">${formatNumber(position.markPrice, 2)}</td>
+                        <td className={`py-3 px-4 text-right font-bold ${pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                          {pnl >= 0 ? '+' : ''}${formatNumber(pnl, 2)}
+                        </td>
+                        <td className={`py-3 px-4 text-right font-bold ${pnlPct >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                          {pnlPct >= 0 ? '+' : ''}{formatNumber(pnlPct, 2)}%
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs font-semibold">
+                            {position.leverage}x
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* 会话持仓信息 */}
+        <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">会话持仓</h3>
         {positions.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -167,11 +273,11 @@ export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
         )}
       </div>
 
-      {/* 交易历史 */}
-      <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">交易历史</h3>
-        {trades.length > 0 ? (
-          <div className="overflow-x-auto max-h-96 overflow-y-auto custom-scrollbar">
+        {/* 交易历史 */}
+        <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">交易历史</h3>
+          {trades.length > 0 ? (
+            <div className="overflow-x-auto max-h-80 overflow-y-auto custom-scrollbar">
             <table className="w-full">
               <thead className="sticky top-0 bg-white">
                 <tr className="border-b border-gray-200">
@@ -226,11 +332,14 @@ export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
             暂无交易记录
           </div>
         )}
+        </div>
       </div>
 
-      {/* AI 聊天记录 */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-[600px]">
-        <ChatPanel sessionId={sessionId} />
+      {/* 右侧侧边栏 - AI 对话 */}
+      <div className="w-[420px] flex-shrink-0">
+        <div className="sticky top-0 h-[calc(100vh-180px)] bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
+          <ChatPanel sessionId={sessionId} />
+        </div>
       </div>
 
       {/* 自定义滚动条样式 */}

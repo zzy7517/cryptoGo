@@ -3,7 +3,7 @@
 创建时间: 2025-10-29
 """
 from fastapi import APIRouter
-from app.api.v1 import session_handlers, agent_handlers, market_handlers
+from app.api.v1 import session_handlers, agent_handlers, market_handlers, binance_account_handlers
 
 # 创建 v1 API 路由器
 api_v1_router = APIRouter(prefix="/api/v1")
@@ -179,9 +179,40 @@ market_router.add_api_route(
 
 
 # ============================================
+# Binance Account 路由
+# ============================================
+binance_account_router = APIRouter(prefix="/binance", tags=["binance"])
+
+# GET /api/v1/binance/account - 获取币安账户信息
+binance_account_router.add_api_route(
+    "/account",
+    binance_account_handlers.get_binance_account_info,
+    methods=["GET"],
+    summary="获取币安账户信息"
+)
+
+# GET /api/v1/binance/positions - 获取币安持仓信息
+binance_account_router.add_api_route(
+    "/positions",
+    binance_account_handlers.get_binance_positions,
+    methods=["GET"],
+    summary="获取币安持仓信息"
+)
+
+# GET /api/v1/binance/summary - 获取币安账户摘要
+binance_account_router.add_api_route(
+    "/summary",
+    binance_account_handlers.get_binance_account_summary,
+    methods=["GET"],
+    summary="获取币安账户摘要（账户+持仓）"
+)
+
+
+# ============================================
 # 注册所有子路由到 v1 router
 # ============================================
 api_v1_router.include_router(session_router)
 api_v1_router.include_router(agent_router)
 api_v1_router.include_router(market_router)
+api_v1_router.include_router(binance_account_router)
 

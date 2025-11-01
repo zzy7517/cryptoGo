@@ -36,7 +36,7 @@ def init_db():
             pool_pre_ping=True,  # 连接前检查
             pool_size=5,         # 连接池大小
             max_overflow=10,     # 最大溢出连接数
-            echo=settings.DEBUG  # 是否打印 SQL（开发模式）
+            echo=False  # 关闭 SQL 日志打印
         )
         
         # 创建会话工厂

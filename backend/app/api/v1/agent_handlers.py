@@ -99,19 +99,19 @@ async def start_background_agent(
     request: RunAgentRequest
 ):
     """
-    启动后台交易 Agent（挂机模式 - 定时循环）
+    启动后台交易（定时循环模式）
 
     工作流程:
     1. 验证交易会话是否存在且状态为 running
-    2. 获取后台 Agent 管理器（单例模式）
-    3. 创建并启动后台线程，线程中使用定时循环执行决策
+    2. 获取后台交易管理器（单例模式）
+    3. 创建并启动后台 asyncio.Task，使用定时循环执行决策
     4. 每个周期：收集数据 -> 调用 AI -> 执行决策 -> 保存
     5. 返回启动成功的结果
 
     """
     # 记录启动日志
     logger.info(
-        "启动后台 Agent（定时循环模式）",
+        "启动后台 Agent (asyncio 版本)",
         session_id=session_id,
         symbols=request.symbols
     )
@@ -132,21 +132,21 @@ async def start_background_agent(
         if session.status != "running":
             raise HTTPException(
                 status_code=400,
-                detail=f"会话状态为 {session.status}，不能启动 Agent"
+                detail=f"会话状态为 {session.status}，不能启动后台交易"
             )
     finally:
         db.close()
 
     try:
-        # 步骤2: 获取全局单例的后台 Agent 管理器
+        # 步骤2: 获取全局单例的后台交易管理器
         manager = get_background_agent_manager()
 
         # 步骤3: 解析决策间隔参数
         # 从 risk_params 中获取 decision_interval，默认 180 秒（3 分钟）
         decision_interval = request.risk_params.get("decision_interval", 180) if request.risk_params else 180
 
-        # 步骤4: 启动后台 Agent（定时循环）
-        result = manager.start_background_agent(
+        # 步骤4: 启动后台 Agent（asyncio.Task）
+        result = await manager.start_background_agent(
             session_id=session_id,
             symbols=request.symbols,
             risk_params=request.risk_params,
@@ -156,7 +156,7 @@ async def start_background_agent(
         # 步骤5: 返回成功结果
         return {
             "success": True,
-            "message": "后台 Agent 已启动（定时循环模式）",
+            "message": "后台 Agent 已启动 (asyncio Task)",
             "data": result
         }
 
@@ -174,15 +174,15 @@ async def start_background_agent(
 
 async def stop_background_agent(session_id: int):
     """
-    停止后台 Agent
+    停止后台 Agent (asyncio 版本)
     
     停止指定会话的后台挂机 Agent
     """
-    logger.info("停止后台 Agent", session_id=session_id)
+    logger.info("停止后台 Agent (asyncio)", session_id=session_id)
     
     try:
         manager = get_background_agent_manager()
-        result = manager.stop_background_agent(session_id)
+        result = await manager.stop_background_agent(session_id)
         
         return {
             "success": True,
@@ -202,12 +202,12 @@ async def stop_background_agent(session_id: int):
 
 async def get_background_status(session_id: int):
     """
-    获取后台 Agent 状态
+    获取后台 Agent 状态 (asyncio 版本)
     
     返回后台挂机 Agent 的运行状态
     """
     manager = get_background_agent_manager()
-    status = manager.get_agent_status(session_id)
+    status = await manager.get_agent_status(session_id)
     
     if status is None:
         return {

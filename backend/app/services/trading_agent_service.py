@@ -1,11 +1,11 @@
 """
 Trading Agent Service - 定时循环版本（无 LangChain）
-参考 nofx 项目逻辑：预先收集数据 -> 一次性调用 AI -> 执行决策 -> 保存
+核心逻辑：数据收集 -> AI分析决策 -> 执行交易 -> 记录保存
 创建时间: 2025-10-30
 """
 
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 import threading
 import time
@@ -18,6 +18,7 @@ from app.services.ai_engine import get_ai_engine
 from app.services.prompt_builder import build_advanced_prompt
 from app.services.binance_trader import create_binance_trader_from_config, BinanceTrader
 from app.services.abstract_trader import PositionSide as TraderPositionSide
+from app.services.response_parser import ResponseParser, Decision as ParsedDecision
 from app.repositories.position_repo import PositionRepository
 from app.repositories.trade_repo import TradeRepository
 from app.repositories.ai_decision_repo import AIDecisionRepository
@@ -57,7 +58,7 @@ class TradingContext:
 
 class Decision:
     """AI 决策"""
-    
+
     def __init__(
         self,
         symbol: str,
@@ -67,7 +68,10 @@ class Decision:
         position_size_usd: float = 0,
         stop_loss_pct: Optional[float] = None,
         take_profit_pct: Optional[float] = None,
-        confidence: int = 50
+        stop_loss_price: Optional[float] = None,
+        take_profit_price: Optional[float] = None,
+        confidence: int = 50,
+        risk_usd: Optional[float] = None
     ):
         self.symbol = symbol
         self.action = action  # open_long, open_short, close_long, close_short, hold, wait
@@ -76,98 +80,125 @@ class Decision:
         self.position_size_usd = position_size_usd
         self.stop_loss_pct = stop_loss_pct
         self.take_profit_pct = take_profit_pct
+        self.stop_loss_price = stop_loss_price  # 绝对价格（优先使用）
+        self.take_profit_price = take_profit_price  # 绝对价格（优先使用）
         self.confidence = confidence
-    
+        self.risk_usd = risk_usd
+
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result = {
             "symbol": self.symbol,
             "action": self.action,
             "reasoning": self.reasoning,
             "leverage": self.leverage,
             "position_size_usd": self.position_size_usd,
-            "stop_loss_pct": self.stop_loss_pct,
-            "take_profit_pct": self.take_profit_pct,
             "confidence": self.confidence
         }
+
+        # 只添加非None的字段
+        if self.stop_loss_pct is not None:
+            result["stop_loss_pct"] = self.stop_loss_pct
+        if self.take_profit_pct is not None:
+            result["take_profit_pct"] = self.take_profit_pct
+        if self.stop_loss_price is not None:
+            result["stop_loss_price"] = self.stop_loss_price
+        if self.take_profit_price is not None:
+            result["take_profit_price"] = self.take_profit_price
+        if self.risk_usd is not None:
+            result["risk_usd"] = self.risk_usd
+
+        return result
 
 
 # ==================== AI 决策函数 ====================
 
-def build_system_prompt(risk_params: Dict[str, Any]) -> str:
+async def build_system_prompt(risk_params: Dict[str, Any], session_id: int) -> str:
     """构建系统提示词"""
-    try:
-        # 从文件加载提示词模板
-        prompt_file = Path(__file__).parent.parent / "prompts" / "trading_system_prompt.txt"
-        
-        with open(prompt_file, 'r', encoding='utf-8') as f:
-            template = f.read()
-        
-        # 填充参数
-        prompt = template.format(
-            symbols=', '.join(risk_params.get('symbols', [])),
-            max_position_size=risk_params.get('max_position_size', 0.2) * 100,
-            stop_loss_pct=risk_params.get('stop_loss_pct', 0.05) * 100,
-            take_profit_pct=risk_params.get('take_profit_pct', 0.10) * 100,
-            max_leverage=risk_params.get('max_leverage', 3)
-        )
-        
-        return prompt
-        
-    except Exception as e:
-        logger.error(f"❌ 加载系统提示词失败: {e}")
-        # 返回简单的默认提示词
-        return "你是一个专业的加密货币交易 AI 助手。"
+    # 从文件加载提示词模板
+    prompt_file = Path(__file__).parent.parent / "prompts" / "trading_system_prompt.txt"
+    
+    with open(prompt_file, 'r', encoding='utf-8') as f:
+        template = f.read()
+    
+    # 获取账户净值
+    from app.services.binance_account_service import BinanceAccountService
+    account_service = BinanceAccountService()
+    account_info = account_service.get_account_info()
+    account_equity = account_info.get('totalMarginBalance', 10000)  # 默认10000
+    
+    # 计算仓位和杠杆值
+    altcoin_min = account_equity * 0.8
+    altcoin_max = account_equity * 1.5
+    altcoin_leverage = risk_params.get('altcoin_leverage', 5)
+    
+    btc_eth_min = account_equity * 5
+    btc_eth_max = account_equity * 10
+    btc_eth_leverage = risk_params.get('btc_eth_leverage', 3)
+    
+    # 使用字符串替换，以支持特殊字符的占位符
+    prompt = template
+    prompt = prompt.replace('{账户净值*0.8}', f'{altcoin_min:.0f}')
+    prompt = prompt.replace('{账户净值*1.5}', f'{altcoin_max:.0f}')
+    prompt = prompt.replace('{山寨币杠杆}', str(altcoin_leverage))
+    prompt = prompt.replace('{账户净值*5}', f'{btc_eth_min:.0f}')
+    prompt = prompt.replace('{账户净值*10}', f'{btc_eth_max:.0f}')
+    prompt = prompt.replace('{BTC/ETH杠杆}', str(btc_eth_leverage))
+    
+    logger.info(f"✅ 系统提示词加载成功，账户净值: {account_equity:.2f}")
+    
+    return prompt
 
 
 def parse_ai_response(response: str) -> List[Decision]:
     """
     解析 AI 响应，提取决策列表
-    
+
     Args:
         response: AI 响应文本
-        
+
     Returns:
         决策列表
     """
     logger.info("🔍 开始解析 AI 响应")
-    
+
     try:
-        # 查找 JSON 数组
-        json_start = response.find('[')
-        json_end = response.rfind(']') + 1
-        
-        if json_start == -1 or json_end == 0:
-            logger.warning("⚠️ 未找到 JSON 数组，返回空决策列表")
-            return []
-        
-        json_str = response[json_start:json_end]
-        
-        # 解析 JSON
-        decisions_data = json.loads(json_str)
-        
-        # 转换为 Decision 对象
+        # 使用新的解析器
+        parsed = ResponseParser.parse(response)
+
+        # 如果有解析错误，记录日志
+        if parsed.parsing_errors:
+            logger.warning(f"⚠️ 解析过程中出现错误:")
+            for error in parsed.parsing_errors:
+                logger.warning(f"  - {error}")
+
+        # 转换为Decision对象（保持兼容性）
         decisions = []
-        for data in decisions_data:
+        for parsed_decision in parsed.decisions:
             decision = Decision(
-                symbol=data.get('symbol', ''),
-                action=data.get('action', 'wait'),
-                reasoning=data.get('reasoning', ''),
-                leverage=data.get('leverage', 1),
-                position_size_usd=data.get('position_size_usd', 0),
-                stop_loss_pct=data.get('stop_loss_pct'),
-                take_profit_pct=data.get('take_profit_pct'),
-                confidence=data.get('confidence', 50)
+                symbol=parsed_decision.symbol,
+                action=parsed_decision.action,
+                reasoning=parsed_decision.reasoning,
+                leverage=parsed_decision.leverage,
+                position_size_usd=parsed_decision.position_size_usd,
+                stop_loss_pct=parsed_decision.stop_loss_pct,
+                take_profit_pct=parsed_decision.take_profit_pct,
+                stop_loss_price=parsed_decision.stop_loss,
+                take_profit_price=parsed_decision.take_profit,
+                confidence=parsed_decision.confidence,
+                risk_usd=parsed_decision.risk_usd
             )
             decisions.append(decision)
-        
-        logger.info(f"✅ 成功解析 {len(decisions)} 个决策")
+
+        logger.info(f"✅ 成功解析 {len(decisions)} 个有效决策")
+
+        # 记录思维链（如果有）
+        if parsed.thinking:
+            logger.info(f"💭 AI 思维链摘要: {parsed.thinking[:200]}...")
+
         return decisions
-        
-    except json.JSONDecodeError as e:
-        logger.error(f"❌ JSON 解析失败: {e}")
-        return []
+
     except Exception as e:
-        logger.error(f"❌ 解析 AI 响应失败: {e}")
+        logger.exception(f"❌ 解析 AI 响应失败: {e}")
         return []
 
 
@@ -189,7 +220,7 @@ async def get_ai_decision(
     
     try:
         # 构建系统提示词
-        system_prompt = build_system_prompt(context.risk_params)
+        system_prompt = await build_system_prompt(context.risk_params, context.session_id)
         
         # 构建用户提示词（使用高级提示词）
         logger.info("📝 构建高级提示词")
@@ -207,7 +238,8 @@ async def get_ai_decision(
             {"role": "user", "content": user_prompt}
         ]
         
-        response = ai_engine.chat(messages, temperature=0.3)
+        # 使用 asyncio.to_thread 将同步调用转为异步，避免阻塞事件循环
+        response = await asyncio.to_thread(ai_engine.chat, messages, temperature=0.3)
         
         logger.info("✅ AI 调用成功")
         logger.debug(f"AI 响应: {response}")
@@ -250,8 +282,9 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
             if decision.action == "open_long":
                 # 获取当前价格用于计算数量
                 exchange = get_exchange_connector()
-                ticker = exchange.get_ticker(decision.symbol)
-                current_price = ticker.get('last')
+                # 使用 asyncio.to_thread 避免阻塞事件循环
+                ticker = await asyncio.to_thread(exchange.get_ticker, decision.symbol)
+                current_price = ticker.get('last') or 0
                 
                 # 计算购买数量
                 quantity = decision.position_size_usd / current_price if current_price > 0 else 0
@@ -259,17 +292,29 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
                 if quantity <= 0:
                     return {"success": False, "error": "数量无效"}
                 
-                # 计算止损止盈价格
+                # 计算止损止盈价格（优先使用绝对价格，其次使用百分比）
                 stop_loss_price = None
                 take_profit_price = None
-                if decision.stop_loss_pct:
+
+                if decision.stop_loss_price is not None:
+                    # 使用绝对价格
+                    stop_loss_price = decision.stop_loss_price
+                elif decision.stop_loss_pct is not None:
+                    # 使用百分比计算
                     stop_loss_price = current_price * (1 - decision.stop_loss_pct / 100)
-                if decision.take_profit_pct:
+
+                if decision.take_profit_price is not None:
+                    # 使用绝对价格
+                    take_profit_price = decision.take_profit_price
+                elif decision.take_profit_pct is not None:
+                    # 使用百分比计算
                     take_profit_price = current_price * (1 + decision.take_profit_pct / 100)
                 
                 # 执行开多仓交易
                 logger.info(f"📈 开多仓: {decision.symbol} 数量={quantity:.6f}")
-                order_result = trader.open_long(
+                # 使用 asyncio.to_thread 避免阻塞事件循环
+                order_result = await asyncio.to_thread(
+                    trader.open_long,
                     symbol=decision.symbol,
                     quantity=quantity,
                     leverage=decision.leverage,
@@ -324,8 +369,9 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
             elif decision.action == "open_short":
                 # 获取当前价格用于计算数量
                 exchange = get_exchange_connector()
-                ticker = exchange.get_ticker(decision.symbol)
-                current_price = ticker.get('last')
+                # 使用 asyncio.to_thread 避免阻塞事件循环
+                ticker = await asyncio.to_thread(exchange.get_ticker, decision.symbol)
+                current_price = ticker.get('last') or 0
                 
                 # 计算卖空数量
                 quantity = decision.position_size_usd / current_price if current_price > 0 else 0
@@ -333,17 +379,29 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
                 if quantity <= 0:
                     return {"success": False, "error": "数量无效"}
                 
-                # 计算止损止盈价格
+                # 计算止损止盈价格（优先使用绝对价格，其次使用百分比）
                 stop_loss_price = None
                 take_profit_price = None
-                if decision.stop_loss_pct:
+
+                if decision.stop_loss_price is not None:
+                    # 使用绝对价格（做空时止损在上方）
+                    stop_loss_price = decision.stop_loss_price
+                elif decision.stop_loss_pct is not None:
+                    # 使用百分比计算（做空时止损在上方）
                     stop_loss_price = current_price * (1 + decision.stop_loss_pct / 100)
-                if decision.take_profit_pct:
+
+                if decision.take_profit_price is not None:
+                    # 使用绝对价格（做空时止盈在下方）
+                    take_profit_price = decision.take_profit_price
+                elif decision.take_profit_pct is not None:
+                    # 使用百分比计算（做空时止盈在下方）
                     take_profit_price = current_price * (1 - decision.take_profit_pct / 100)
                 
                 # 执行开空仓交易
                 logger.info(f"📉 开空仓: {decision.symbol} 数量={quantity:.6f}")
-                order_result = trader.open_short(
+                # 使用 asyncio.to_thread 避免阻塞事件循环
+                order_result = await asyncio.to_thread(
+                    trader.open_short,
                     symbol=decision.symbol,
                     quantity=quantity,
                     leverage=decision.leverage,
@@ -413,7 +471,9 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
                 # 执行平仓交易
                 position_side = TraderPositionSide.LONG if side == "long" else TraderPositionSide.SHORT
                 logger.info(f"🔻 平仓: {decision.symbol} {side}")
-                order_result = trader.close_position(
+                # 使用 asyncio.to_thread 避免阻塞事件循环
+                order_result = await asyncio.to_thread(
+                    trader.close_position,
                     symbol=decision.symbol,
                     position_side=position_side,
                     quantity=float(target_position.quantity)
@@ -487,10 +547,10 @@ class TradingAgentService:
     """
     基于定时循环的交易 Agent 服务
     
-    参考 nofx 项目逻辑：
+    核心流程：
     1. 使用定时器触发周期性决策
     2. 每个周期独立：收集数据 -> 调用 AI -> 执行决策 -> 保存
-    3. 不使用 LangChain，直接调用 AI API
+    3. 未使用复杂agent框架
     """
     
     def __init__(self, session_id: int):
@@ -649,7 +709,7 @@ class TradingAgentService:
                         "context": context.to_dict()  # 上下文信息
                     },
                     ai_response=ai_response,
-                    reasoning=ai_response[:500],  # 截取前500字符
+                    reasoning=ai_response,  # 完整的AI响应（移除500字符限制）
                     suggested_actions={
                         "decisions": [d.to_dict() for d in decisions],
                         "execution_results": execution_results
@@ -669,14 +729,21 @@ class TradingAgentService:
 # ==================== 后台循环管理器 ====================
 
 class BackgroundAgentManager:
-    """后台 Agent 管理器 - 定时循环版本"""
+    """
+    后台交易管理器
+    
+    管理会话的后台交易任务
+    状态存储在数据库中，内存只保留 Task 引用
+    """
     
     def __init__(self):
-        self._agents: Dict[int, Dict[str, Any]] = {}
-        self._lock = threading.Lock()
-        logger.info("BackgroundAgentManager 已初始化（定时循环版本）")
+        # 只存储 Task 引用和取消事件
+        self._tasks: Dict[int, asyncio.Task] = {}
+        self._cancel_events: Dict[int, asyncio.Event] = {}
+        self._lock = asyncio.Lock()
+        logger.info("✨ 后台交易管理器已初始化")
     
-    def start_background_agent(
+    async def start_background_agent(
         self,
         session_id: int,
         symbols: List[str],
@@ -684,7 +751,7 @@ class BackgroundAgentManager:
         decision_interval: int = 180  # 默认3分钟
     ) -> Dict[str, Any]:
         """
-        启动后台 Agent（定时循环）
+        启动后台 Agent
         
         Args:
             session_id: 交易会话 ID
@@ -692,8 +759,8 @@ class BackgroundAgentManager:
             risk_params: 风险参数
             decision_interval: 决策间隔（秒），默认180秒（3分钟）
         """
-        with self._lock:
-            if session_id in self._agents:
+        async with self._lock:
+            if session_id in self._tasks:
                 raise ValueError(f"Session {session_id} 的 Agent 已在运行")
             
             if risk_params is None:
@@ -704,33 +771,33 @@ class BackgroundAgentManager:
                     "max_leverage": 3
                 }
             
-            stop_event = threading.Event()
+            # 更新数据库：设置后台状态为 starting
+            await self._update_session_status(
+                session_id=session_id,
+                background_status='starting',
+                background_started_at=datetime.now(timezone.utc),
+                decision_interval=decision_interval,
+                trading_symbols=symbols,
+                trading_params=risk_params,
+                decision_count=0,
+                last_error=None
+            )
             
-            thread = threading.Thread(
-                target=self._run_background_loop,
-                args=(session_id, symbols, risk_params, decision_interval, stop_event),
-                daemon=True,
+            # 创建取消事件
+            cancel_event = asyncio.Event()
+            
+            # 创建 asyncio.Task
+            task = asyncio.create_task(
+                self._run_background_loop(
+                    session_id, symbols, risk_params, decision_interval, cancel_event
+                ),
                 name=f"BackgroundAgent-{session_id}"
             )
             
-            self._agents[session_id] = {
-                'thread': thread,
-                'stop_event': stop_event,
-                'config': {
-                    'symbols': symbols,
-                    'risk_params': risk_params,
-                    'decision_interval': decision_interval
-                },
-                'status': 'starting',
-                'started_at': datetime.now(),
-                'last_run_time': None,
-                'run_count': 0,
-                'last_error': None
-            }
+            self._tasks[session_id] = task
+            self._cancel_events[session_id] = cancel_event
             
-            thread.start()
-            
-            logger.info(f"✅ 后台 Agent 已启动", session_id=session_id, interval=decision_interval)
+            logger.info(f"✅ 后台交易已启动", session_id=session_id, interval=decision_interval)
             
             return {
                 'session_id': session_id,
@@ -739,74 +806,124 @@ class BackgroundAgentManager:
                 'symbols': symbols
             }
     
-    def stop_background_agent(self, session_id: int) -> Dict[str, Any]:
-        """停止后台 Agent"""
-        logger.info(f"🛑 [stop_background_agent] 开始 - Session {session_id} 获取锁...")
-        with self._lock:
-            logger.info(f"✅ [stop_background_agent] 已获取锁")
-            if session_id not in self._agents:
-                logger.error(f"❌ [stop_background_agent] Session {session_id} 的 Agent 未运行")
-                raise ValueError(f"Session {session_id} 的 Agent 未运行")
+    async def stop_background_agent(self, session_id: int) -> Dict[str, Any]:
+        """
+        停止后台交易
+        
+        优雅地取消 asyncio.Task 并等待其完成
+        """
+        logger.info(f"🛑 [stop] 开始停止 Session {session_id}...")
+        
+        async with self._lock:
+            if session_id not in self._tasks:
+                logger.error(f"❌ [stop] Session {session_id} 后台交易未运行")
+                raise ValueError(f"Session {session_id} 后台交易未运行")
             
-            agent = self._agents[session_id]
-            logger.info(f"🚩 [stop_background_agent] 设置停止信号...")
-            agent['stop_event'].set()
-            agent['status'] = 'stopping'
-        logger.info(f"⏳ [stop_background_agent] 等待线程结束 (最多10秒)...")
-        agent['thread'].join(timeout=10)
-        logger.info(f"✅ [stop_background_agent] 线程 join 完成")
-        logger.info(f"📌 [stop_background_agent] 线程最终状态 - 存活: {agent['thread'].is_alive()}")
+            # 更新数据库状态为 stopping
+            await self._update_session_status(
+                session_id=session_id,
+                background_status='stopping'
+            )
+            
+            cancel_event = self._cancel_events[session_id]
+            task = self._tasks[session_id]
+            
+            logger.info(f"🚩 [stop] 设置取消信号...")
+            cancel_event.set()
         
-        logger.info(f"🔒 [stop_background_agent] 再次获取锁以清理...")
-        with self._lock:
-            logger.info(f"✅ [stop_background_agent] 已获取锁")
-            stopped_agent = self._agents.pop(session_id, None)
-            logger.info(f"🗑️ [stop_background_agent] 已从字典中移除 Agent")
+        # 在锁外等待 task 完成（避免死锁）
+        logger.info(f"⏳ [stop] 等待 Task 完成 (最多10秒)...")
+        try:
+            await asyncio.wait_for(task, timeout=10)
+            logger.info(f"✅ [stop] Task 已正常完成")
+        except asyncio.TimeoutError:
+            logger.warning(f"⏱️ [stop] Task 超时，强制取消...")
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                logger.info(f"✅ [stop] Task 已被取消")
+        except asyncio.CancelledError:
+            logger.info(f"✅ [stop] Task 已被取消")
+        except Exception as e:
+            logger.error(f"❌ [stop] Task 异常: {e}")
         
-        logger.info(f"⏹️ [stop_background_agent] 后台 Agent 已停止 - Session {session_id}")
+        # 清理内存中的引用
+        async with self._lock:
+            self._tasks.pop(session_id, None)
+            self._cancel_events.pop(session_id, None)
+            logger.info(f"🗑️ [stop] 已从内存中移除 Task 引用")
+        
+        # 获取最终的运行次数
+        status = await self._get_session_status(session_id)
+        run_count = status.get('decision_count', 0) if status else 0
+        
+        logger.info(f"⏹️ [stop] 后台交易已停止 (Session {session_id})")
         
         return {
             'session_id': session_id,
             'status': 'stopped',
-            'run_count': stopped_agent['run_count'] if stopped_agent else 0
+            'run_count': run_count
         }
     
-    def get_agent_status(self, session_id: int) -> Optional[Dict[str, Any]]:
-        """获取 Agent 状态"""
-        with self._lock:
-            agent = self._agents.get(session_id)
-            
-            if not agent:
-                return None
-            
-            return {
-                'session_id': session_id,
-                'status': agent['status'],
-                'started_at': agent['started_at'].isoformat(),
-                'last_run_time': agent['last_run_time'].isoformat() if agent['last_run_time'] else None,
-                'run_count': agent['run_count'],
-                'config': agent['config'],
-                'last_error': agent['last_error'],
-                'is_alive': agent['thread'].is_alive()
-            }
+    async def get_agent_status(self, session_id: int) -> Optional[Dict[str, Any]]:
+        """获取后台交易状态 - 从数据库读取"""
+        # 从数据库获取会话信息
+        session_data = await self._get_session_status(session_id)
+        
+        if not session_data:
+            return None
+        
+        # 检查后台状态是否为 idle（从未启动）
+        if session_data.get('background_status') == 'idle':
+            return None
+
+        return {
+            'session_id': session_id,
+            'status': session_data.get('background_status', 'idle'),
+            'started_at': session_data.get('background_started_at').isoformat() if session_data.get('background_started_at') else None,
+            'stopped_at': session_data.get('background_stopped_at').isoformat() if session_data.get('background_stopped_at') else None,
+            'last_run_time': session_data.get('last_decision_time').isoformat() if session_data.get('last_decision_time') else None,
+            'run_count': session_data.get('decision_count', 0),
+            'config': {
+                'symbols': session_data.get('trading_symbols', []),
+                'decision_interval': session_data.get('decision_interval', 180),
+                'risk_params': session_data.get('trading_params', {})
+            },
+            'last_error': session_data.get('last_error')
+        }
     
     def list_agents(self) -> List[Dict[str, Any]]:
-        """列出所有运行中的 Agent"""
-        with self._lock:
-            return [self.get_agent_status(sid) for sid in self._agents.keys()]
+        """
+        列出所有运行中的 Agent (同步版本，用于非async上下文)
+        
+        注意：这个方法是同步的，仅用于 shutdown 时调用
+        """
+        logger.info(f"📋 [list_agents] 开始（同步版本）...")
+        result = []
+        for session_id in list(self._tasks.keys()):
+            task = self._tasks.get(session_id)
+            if task and not task.done():
+                result.append({
+                    'session_id': session_id
+                })
+        logger.info(f"📋 [list_agents] 返回 {len(result)} 个 Agent")
+        return result
     
-    def _run_background_loop(
+    async def _run_background_loop(
         self,
         session_id: int,
         symbols: List[str],
         risk_params: Dict[str, Any],
         decision_interval: int,
-        stop_event: threading.Event
+        cancel_event: asyncio.Event
     ):
         """
-        后台循环（参考 nofx 的定时循环逻辑）
+        后台循环 - 定时执行交易决策
         
-        使用 time.sleep 等待固定间隔，每个周期调用一次决策
+        使用 asyncio.sleep 等待固定间隔，每个周期调用一次决策
+        使用 asyncio.Event 进行优雅取消
+        状态存储在数据库中
         """
         logger.info("🔄" * 30)
         logger.info("🔄 后台循环启动")
@@ -814,54 +931,58 @@ class BackgroundAgentManager:
         logger.info(f"📌 决策间隔: {decision_interval}秒")
         logger.info("🔄" * 30)
         
-        with self._lock:
-            if session_id in self._agents:
-                self._agents[session_id]['status'] = 'running'
+        # 更新数据库状态为 running
+        await self._update_session_status(
+            session_id=session_id,
+            background_status='running'
+        )
         
         # 创建 Agent 实例
         agent = TradingAgentService(session_id)
-        
-        # 为这个线程创建一个持久的事件循环
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
         
         try:
             # 首次立即执行
             logger.info("🚀 执行首次决策周期...")
             try:
-                result = loop.run_until_complete(agent.run_decision_cycle(symbols, risk_params))
+                result = await agent.run_decision_cycle(symbols, risk_params)
                 
-                with self._lock:
-                    if session_id in self._agents:
-                        self._agents[session_id]['run_count'] += 1
-                        self._agents[session_id]['last_run_time'] = datetime.now()
-                        self._agents[session_id]['last_error'] = None
+                # 更新数据库
+                await self._increment_decision_count(session_id)
                 
                 logger.info(f"✅ 首次决策完成, 成功={result.get('success')}")
                 
             except Exception as e:
                 logger.exception(f"❌ 首次决策失败: {e}")
                 
-                with self._lock:
-                    if session_id in self._agents:
-                        self._agents[session_id]['last_error'] = str(e)
+                # 记录错误到数据库
+                await self._update_session_status(
+                    session_id=session_id,
+                    last_error=str(e)
+                )
             
             # 定时循环
             loop_count = 1
-            while not stop_event.is_set():
-                # 等待下一个周期
-                logger.info(f"😴 等待 {decision_interval}秒 后进行下一次决策...")
-                logger.info(f"🚩 [循环] 停止信号状态: {stop_event.is_set()}")
+            while not cancel_event.is_set():
+                # 等待下一个周期（可被取消信号中断）
+                logger.info(f"😴 等待 {decision_interval}秒后进行下一次决策...")
+                logger.info(f"🚩 [循环] 取消信号状态: {cancel_event.is_set()}")
                 
-                # 使用 stop_event.wait 代替 time.sleep，这样可以快速响应停止信号
-                logger.info(f"⏳ [循环] 开始等待 (timeout={decision_interval}秒)...")
-                wait_result = stop_event.wait(timeout=decision_interval)
-                logger.info(f"✅ [循环] 等待结束, wait 返回值: {wait_result}")
-                logger.info(f"🚩 [循环] 停止信号状态: {stop_event.is_set()}")
+                try:
+                    # 使用 asyncio.wait_for 实现可中断的等待
+                    await asyncio.wait_for(
+                        cancel_event.wait(),
+                        timeout=decision_interval
+                    )
+                    # 如果 wait() 返回了，说明收到取消信号
+                    logger.info(f"🛑 [循环] 收到取消信号，退出循环")
+                    break
+                except asyncio.TimeoutError:
+                    # 超时是正常的，继续下一次循环
+                    logger.info(f"⏰ [循环] 等待超时，开始新周期")
                 
-                if wait_result:
-                    # 如果是因为停止信号而返回，退出循环
-                    logger.info(f"🛑 [循环] 收到停止信号，退出循环")
+                # 再次检查取消信号
+                if cancel_event.is_set():
+                    logger.info(f"🛑 [循环] 检测到取消信号，退出循环")
                     break
                 
                 loop_count += 1
@@ -872,27 +993,26 @@ class BackgroundAgentManager:
                 logger.info(f"⏰ 时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
                 
                 try:
-                    result = loop.run_until_complete(agent.run_decision_cycle(symbols, risk_params))
+                    result = await agent.run_decision_cycle(symbols, risk_params)
                     
-                    with self._lock:
-                        if session_id in self._agents:
-                            self._agents[session_id]['run_count'] += 1
-                            self._agents[session_id]['last_run_time'] = datetime.now()
-                            self._agents[session_id]['last_error'] = None
+                    # 更新数据库
+                    await self._increment_decision_count(session_id)
                     
                     logger.info(f"✅ 决策周期 #{loop_count} 完成, 成功={result.get('success')}")
                     
                     # 检查会话状态
-                    if not self._check_session_running(session_id):
+                    if not await self._check_session_running(session_id):
                         logger.warning("⚠️ 会话已结束，停止循环")
                         break
                     
                 except Exception as e:
                     logger.exception(f"❌ 决策周期 #{loop_count} 失败: {e}")
                     
-                    with self._lock:
-                        if session_id in self._agents:
-                            self._agents[session_id]['last_error'] = str(e)
+                    # 记录错误到数据库
+                    await self._update_session_status(
+                        session_id=session_id,
+                        last_error=str(e)
+                    )
                 
                 loop_duration = time.time() - loop_start
                 logger.info(f"⏱️ 本次周期耗时: {loop_duration:.2f}秒")
@@ -903,25 +1023,35 @@ class BackgroundAgentManager:
             logger.info(f"📊 总循环次数: {loop_count}")
             logger.info("🛑" * 30)
             
+        except asyncio.CancelledError:
+            logger.info(f"🛑 Task 被取消 (Session {session_id})")
+            raise  # 重新抛出以正确处理取消
+            
         except Exception as e:
             logger.exception(f"💥 后台循环异常终止: {e}")
             
-            with self._lock:
-                if session_id in self._agents:
-                    self._agents[session_id]['status'] = 'crashed'
-                    self._agents[session_id]['last_error'] = str(e)
+            # 更新数据库：后台崩溃
+            await self._update_session_status(
+                session_id=session_id,
+                background_status='crashed',
+                last_error=str(e),
+                background_stopped_at=datetime.now(timezone.utc)
+            )
             
             # Agent 崩溃时，自动将会话状态改为 crashed
             try:
                 db = next(get_db())
                 try:
-                    from app.services.trading_session_service import TradingSessionService
-                    session_service = TradingSessionService(db)
-                    session_service.end_session(
-                        session_id=session_id,
-                        status='crashed',
-                        notes=f'Agent 异常终止: {str(e)}'
-                    )
+                    def update_session():
+                        from app.services.trading_session_service import TradingSessionService
+                        session_service = TradingSessionService(db)
+                        session_service.end_session(
+                            session_id=session_id,
+                            status='crashed',
+                            notes=f'Agent 异常终止: {str(e)}'
+                        )
+                    
+                    await asyncio.to_thread(update_session)
                     logger.info(f"✅ 已将会话 {session_id} 状态改为 crashed")
                 except Exception as update_error:
                     logger.error(f"更新会话状态失败: {str(update_error)}")
@@ -931,43 +1061,115 @@ class BackgroundAgentManager:
                 logger.error(f"数据库操作失败: {str(db_error)}")
         
         finally:
-            logger.info(f"🔚 [_run_background_loop] finally 块 - Session {session_id}")
+            logger.info(f"🔚 [loop] finally 块 - Session {session_id}")
             
-            # 清理事件循环
-            try:
-                # 取消所有未完成的任务
-                pending = asyncio.all_tasks(loop)
-                for task in pending:
-                    task.cancel()
-                
-                # 等待所有任务完成
-                if pending:
-                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-                
-                # 关闭事件循环
-                loop.close()
-                logger.info(f"✅ [_run_background_loop] 事件循环已清理")
-            except Exception as e:
-                logger.error(f"⚠️ [_run_background_loop] 清理事件循环失败: {e}")
+            # 更新数据库：后台停止
+            await self._update_session_status(
+                session_id=session_id,
+                background_status='stopped',
+                background_stopped_at=datetime.now(timezone.utc)
+            )
             
-            logger.info(f"🔒 [_run_background_loop] 获取锁以更新状态...")
-            with self._lock:
-                logger.info(f"✅ [_run_background_loop] 已获取锁")
-                if session_id in self._agents:
-                    self._agents[session_id]['status'] = 'stopped'
-                    logger.info(f"✅ [_run_background_loop] 状态已更新为 stopped")
-                else:
-                    logger.warning(f"⚠️ [_run_background_loop] Session {session_id} 已不在 _agents 字典中")
-            logger.info(f"🎬 [_run_background_loop] 线程即将退出 - Session {session_id}")
+            logger.info(f"🎬 [loop] Task 即将退出 - Session {session_id}")
     
-    def _check_session_running(self, session_id: int) -> bool:
+    async def _update_session_status(self, session_id: int, **kwargs):
+        """
+        更新会话状态字段
+        
+        Args:
+            session_id: 会话 ID
+            **kwargs: 要更新的字段（background_status, decision_count 等）
+        """
+        db = next(get_db())
+        try:
+            def update():
+                from app.models import TradingSession
+                session = db.query(TradingSession).filter_by(id=session_id).first()
+                if session:
+                    for key, value in kwargs.items():
+                        if hasattr(session, key):
+                            setattr(session, key, value)
+                    db.commit()
+            
+            await asyncio.to_thread(update)
+        except Exception as e:
+            logger.error(f"更新会话状态失败: {e}", session_id=session_id)
+        finally:
+            db.close()
+    
+    async def _get_session_status(self, session_id: int) -> Optional[Dict[str, Any]]:
+        """
+        从数据库获取会话状态
+        
+        Args:
+            session_id: 会话 ID
+            
+        Returns:
+            会话状态字典
+        """
+        db = next(get_db())
+        try:
+            def query():
+                from app.models import TradingSession
+                session = db.query(TradingSession).filter_by(id=session_id).first()
+                if not session:
+                    return None
+                
+                return {
+                    'background_status': session.background_status,
+                    'background_started_at': session.background_started_at,
+                    'background_stopped_at': session.background_stopped_at,
+                    'last_decision_time': session.last_decision_time,
+                    'decision_count': session.decision_count,
+                    'decision_interval': session.decision_interval,
+                    'trading_symbols': session.trading_symbols,
+                    'last_error': session.last_error,
+                    'trading_params': session.trading_params
+                }
+            
+            return await asyncio.to_thread(query)
+        except Exception as e:
+            logger.error(f"获取会话状态失败: {e}", session_id=session_id)
+            return None
+        finally:
+            db.close()
+    
+    async def _increment_decision_count(self, session_id: int):
+        """
+        增加决策执行次数并更新最后决策时间
+        
+        Args:
+            session_id: 会话 ID
+        """
+        db = next(get_db())
+        try:
+            def update():
+                from app.models import TradingSession
+                session = db.query(TradingSession).filter_by(id=session_id).first()
+                if session:
+                    session.decision_count = (session.decision_count or 0) + 1
+                    session.last_decision_time = datetime.now(timezone.utc)
+                    # 清除错误信息（成功执行后）
+                    session.last_error = None
+                    db.commit()
+            
+            await asyncio.to_thread(update)
+        except Exception as e:
+            logger.error(f"更新决策次数失败: {e}", session_id=session_id)
+        finally:
+            db.close()
+    
+    async def _check_session_running(self, session_id: int) -> bool:
         """检查会话是否仍在运行"""
         try:
             db = next(get_db())
             try:
-                session_repo = TradingSessionRepository(db)
-                session = session_repo.get_by_id(session_id)
-                return session is not None and session.status == 'running'
+                def query():
+                    session_repo = TradingSessionRepository(db)
+                    session = session_repo.get_by_id(session_id)
+                    return session is not None and session.status == 'running'
+                
+                return await asyncio.to_thread(query)
             finally:
                 db.close()
         except Exception:

@@ -75,7 +75,7 @@ async def end_session(
         
         # 自动停止该会话的 Agent（如果正在运行）
         manager = get_background_agent_manager()
-        agent_status = manager.get_agent_status(session.id)
+        agent_status = await manager.get_agent_status(session.id)
         
         if agent_status:
             try:
@@ -123,7 +123,7 @@ async def get_active_session(db: Session = Depends(get_db)):
         
         # 获取 Agent 状态
         manager = get_background_agent_manager()
-        agent_status = manager.get_agent_status(session.id)
+        agent_status = await manager.get_agent_status(session.id)
         
         return {
             "success": True,

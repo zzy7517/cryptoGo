@@ -2,8 +2,9 @@
 交易会话模型
 定义交易会话的数据结构，记录每次交易运行实例的完整信息
 创建时间: 2025-10-27
+更新时间: 2025-10-31 - 去掉 Agent 概念，统一为 Session
 """
-from sqlalchemy import Column, BigInteger, String, Numeric, Integer, Boolean, Text, DateTime, Index, CheckConstraint
+from sqlalchemy import Column, BigInteger, String, Numeric, Integer, Boolean, Text, DateTime, Index, CheckConstraint, ARRAY
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 
@@ -38,6 +39,17 @@ class TradingSession(Base):
     winning_trades = Column(Integer, default=0, comment="盈利交易次数")
     losing_trades = Column(Integer, default=0, comment="亏损交易次数")
     
+    # 后台交易运行状态
+    background_status = Column(String(20), default='idle', comment="后台运行状态: idle, starting, running, stopping, stopped, crashed")
+    background_started_at = Column(DateTime(timezone=True), comment="后台启动时间")
+    background_stopped_at = Column(DateTime(timezone=True), comment="后台停止时间")
+    last_decision_time = Column(DateTime(timezone=True), comment="最后决策时间")
+    decision_count = Column(Integer, default=0, comment="决策执行次数")
+    decision_interval = Column(Integer, default=180, comment="决策间隔（秒）")
+    trading_symbols = Column(ARRAY(Text), comment="交易对列表")
+    last_error = Column(Text, comment="最后的错误信息")
+    trading_params = Column(JSONB, comment="交易参数（JSON格式，包含 risk_params 等）")
+    
     # 配置信息
     config = Column(JSONB, comment="运行配置（JSON格式）")
     
@@ -47,6 +59,7 @@ class TradingSession(Base):
     # 约束
     __table_args__ = (
         CheckConstraint("status IN ('running', 'stopped', 'crashed', 'completed')", name='check_session_status'),
+        CheckConstraint("background_status IN ('idle', 'starting', 'running', 'stopping', 'stopped', 'crashed')", name='check_background_status'),
         Index('idx_session_status', 'status'),
         Index('idx_session_created', 'created_at'),
     )

@@ -155,20 +155,31 @@ export default function AgentMonitor({ sessionId }: AgentMonitorProps) {
           <div className="flex justify-between text-sm pt-3 border-t border-gray-200">
             <span className="text-gray-600">运行时长</span>
             <span className="text-xs text-gray-500 font-medium">
-              {Math.floor((new Date().getTime() - new Date(agentStatus.started_at).getTime()) / 60000)} 分钟
+              {(() => {
+                const now = new Date();
+                const startTime = new Date(agentStatus.started_at);
+                const diffMs = now.getTime() - startTime.getTime();
+                const diffMinutes = Math.floor(diffMs / 60000);
+
+                // 如果时间差为负数或异常大，显示友好提示
+                if (diffMinutes < 0) {
+                  return '时间异常';
+                } else if (diffMinutes < 60) {
+                  return `${diffMinutes} 分钟`;
+                } else if (diffMinutes < 1440) {
+                  const hours = Math.floor(diffMinutes / 60);
+                  const mins = diffMinutes % 60;
+                  return `${hours} 小时 ${mins} 分钟`;
+                } else {
+                  const days = Math.floor(diffMinutes / 1440);
+                  const hours = Math.floor((diffMinutes % 1440) / 60);
+                  return `${days} 天 ${hours} 小时`;
+                }
+              })()}
             </span>
           </div>
         )}
 
-        {/* 线程状态 */}
-        {agentStatus.is_alive !== undefined && (
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">线程状态</span>
-            <span className={`text-xs font-medium ${agentStatus.is_alive ? 'text-green-600' : 'text-red-600'}`}>
-              {agentStatus.is_alive ? '存活' : '已终止'}
-            </span>
-          </div>
-        )}
       </div>
     </div>
   );

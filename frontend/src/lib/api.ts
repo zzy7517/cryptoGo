@@ -280,3 +280,34 @@ export const sessionApi = {
   },
 };
 
+/**
+ * Binance Account API
+ * 币安账户信息 API
+ * 创建时间: 2025-10-31
+ */
+export const binanceApi = {
+  /**
+   * 获取币安账户信息
+   */
+  getAccountInfo: async (): Promise<any> => {
+    const response = await apiClient.get('/api/v1/binance/account');
+    return response.data;
+  },
+
+  /**
+   * 获取币安持仓信息
+   */
+  getPositions: async (): Promise<any> => {
+    const response = await apiClient.get('/api/v1/binance/positions');
+    return response.data;
+  },
+
+  /**
+   * 获取币安账户摘要（账户+持仓）
+   */
+  getAccountSummary: async (): Promise<any> => {
+    const response = await apiClient.get('/api/v1/binance/summary');
+    return response.data;
+  },
+};
+

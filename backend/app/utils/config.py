@@ -20,7 +20,10 @@ class Settings(BaseSettings):
     EXCHANGE: str = "binance"
     BINANCE_API_KEY: Optional[str] = None
     BINANCE_SECRET: Optional[str] = None
-    BINANCE_TESTNET: bool = True
+    
+    # 代理配置
+    HTTP_PROXY: Optional[str] = "http://127.0.0.1:7897"
+    HTTPS_PROXY: Optional[str] = "http://127.0.0.1:7897"
     
     # 默认交易对（合约格式）
     DEFAULT_SYMBOL: str = "BTC/USDT:USDT"

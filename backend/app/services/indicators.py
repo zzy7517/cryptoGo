@@ -22,6 +22,46 @@ class TechnicalIndicators:
         pass
     
     @staticmethod
+    def _calculate_ema_manual(closes: List[float], period: int) -> List[float]:
+        """
+        手工计算EMA（指数移动平均线）
+        
+        使用标准EMA算法：
+        1. 先计算前N个数据的SMA作为初始EMA
+        2. 然后用公式迭代：EMA = (Price - EMA_prev) * multiplier + EMA_prev
+        3. multiplier = 2 / (period + 1)
+        
+        Args:
+            closes: 收盘价列表
+            period: EMA周期
+            
+        Returns:
+            EMA值列表
+        """
+        if len(closes) < period:
+            # 数据不足，返回0填充
+            return [0.0] * len(closes)
+        
+        result = []
+        
+        # 前period-1个值用0填充（因为还没有足够数据计算）
+        for i in range(period - 1):
+            result.append(0.0)
+        
+        # 计算初始EMA：使用前period个数据的SMA
+        initial_sum = sum(closes[:period])
+        ema = initial_sum / period
+        result.append(ema)
+        
+        # 计算后续EMA值
+        multiplier = 2.0 / (period + 1)
+        for i in range(period, len(closes)):
+            ema = (closes[i] - ema) * multiplier + ema
+            result.append(ema)
+        
+        return result
+    
+    @staticmethod
     def _klines_to_dataframe(klines: List[Dict[str, Any]]) -> pd.DataFrame:
         """
         将K线数据转换为DataFrame
@@ -67,16 +107,22 @@ class TechnicalIndicators:
                 'timestamps': df.index.astype(np.int64) // 10**6  # 转换为毫秒
             }
             
+            # 提取收盘价列表
+            closes = df['close'].tolist()
+            
             for period in periods:
-                ema = ta.ema(df['close'], length=period)
-                result[f'ema{period}'] = ema.fillna(0).tolist()
+                # 使用手工实现的EMA计算（标准算法）
+                ema_values = self._calculate_ema_manual(closes, period)
+                result[f'ema{period}'] = ema_values
+                logger.debug(f"EMA{period} 计算完成，最新值: {ema_values[-1] if ema_values else 0:.2f}")
             
             logger.info(f"成功计算 EMA，周期: {periods}")
             return result
             
         except Exception as e:
             logger.error(f"计算EMA失败: {str(e)}")
-            raise
+            # 返回空列表而不是抛出异常，确保系统继续运行
+            return {f'ema{p}': [] for p in periods}
     
     def calculate_macd(
         self, 
@@ -108,19 +154,28 @@ class TechnicalIndicators:
             # pandas_ta的MACD返回DataFrame，包含MACD、MACDh(histogram)、MACDs(signal)
             macd_df = ta.macd(df['close'], fast=fast, slow=slow, signal=signal)
             
-            result = {
-                'timestamps': df.index.astype(np.int64) // 10**6,
-                'macd': macd_df[f'MACD_{fast}_{slow}_{signal}'].fillna(0).tolist(),
-                'signal': macd_df[f'MACDs_{fast}_{slow}_{signal}'].fillna(0).tolist(),
-                'histogram': macd_df[f'MACDh_{fast}_{slow}_{signal}'].fillna(0).tolist(),
-            }
+            if macd_df is not None:
+                result = {
+                    'timestamps': df.index.astype(np.int64) // 10**6,
+                    'macd': macd_df[f'MACD_{fast}_{slow}_{signal}'].fillna(0).tolist(),
+                    'signal': macd_df[f'MACDs_{fast}_{slow}_{signal}'].fillna(0).tolist(),
+                    'histogram': macd_df[f'MACDh_{fast}_{slow}_{signal}'].fillna(0).tolist(),
+                }
+            else:
+                logger.warning("MACD计算返回None，返回默认值")
+                result = {
+                    'timestamps': df.index.astype(np.int64) // 10**6,
+                    'macd': [0] * len(df),
+                    'signal': [0] * len(df),
+                    'histogram': [0] * len(df),
+                }
             
             logger.info(f"成功计算 MACD ({fast},{slow},{signal})")
             return result
             
         except Exception as e:
             logger.error(f"计算MACD失败: {str(e)}")
-            raise
+            return {'macd': [], 'signal': [], 'histogram': [], 'timestamps': []}
     
     def calculate_rsi(
         self, 
@@ -150,14 +205,18 @@ class TechnicalIndicators:
             
             for period in periods:
                 rsi = ta.rsi(df['close'], length=period)
-                result[f'rsi{period}'] = rsi.fillna(0).tolist()
+                if rsi is not None:
+                    result[f'rsi{period}'] = rsi.fillna(0).tolist()
+                else:
+                    logger.warning(f"RSI{period} 计算返回None，返回默认值")
+                    result[f'rsi{period}'] = [50] * len(df)  # 默认中性值50
             
             logger.info(f"成功计算 RSI，周期: {periods}")
             return result
             
         except Exception as e:
             logger.error(f"计算RSI失败: {str(e)}")
-            raise
+            return {f'rsi{p}': [] for p in periods}
     
     def calculate_atr(
         self, 
@@ -187,14 +246,20 @@ class TechnicalIndicators:
             
             for period in periods:
                 atr = ta.atr(df['high'], df['low'], df['close'], length=period)
-                result[f'atr{period}'] = atr.fillna(0).tolist()
+                if atr is not None:
+                    result[f'atr{period}'] = atr.fillna(0).tolist()
+                else:
+                    logger.warning(f"ATR{period} 计算返回None，使用简化计算")
+                    # 简化的ATR: high - low 的移动平均
+                    tr = df['high'] - df['low']
+                    result[f'atr{period}'] = tr.rolling(window=period).mean().fillna(0).tolist()
             
             logger.info(f"成功计算 ATR，周期: {periods}")
             return result
             
         except Exception as e:
             logger.error(f"计算ATR失败: {str(e)}")
-            raise
+            return {f'atr{p}': [] for p in periods}
     
     def calculate_all_indicators(
         self, 
@@ -263,10 +328,12 @@ class TechnicalIndicators:
         """
         try:
             df = self._klines_to_dataframe(klines)
+            closes = df['close'].tolist()
             
-            # 计算各指标
-            ema20 = ta.ema(df['close'], length=20)
-            ema50 = ta.ema(df['close'], length=50)
+            # 计算各指标 - EMA使用手工实现
+            ema20_values = self._calculate_ema_manual(closes, 20)
+            ema50_values = self._calculate_ema_manual(closes, 50)
+            
             macd_df = ta.macd(df['close'], fast=12, slow=26, signal=9)
             rsi7 = ta.rsi(df['close'], length=7)
             rsi14 = ta.rsi(df['close'], length=14)
@@ -275,15 +342,15 @@ class TechnicalIndicators:
             
             # 获取最新值
             result = {
-                'ema20': float(ema20.iloc[-1]) if not pd.isna(ema20.iloc[-1]) else 0.0,
-                'ema50': float(ema50.iloc[-1]) if not pd.isna(ema50.iloc[-1]) else 0.0,
-                'macd': float(macd_df['MACD_12_26_9'].iloc[-1]) if not pd.isna(macd_df['MACD_12_26_9'].iloc[-1]) else 0.0,
-                'signal': float(macd_df['MACDs_12_26_9'].iloc[-1]) if not pd.isna(macd_df['MACDs_12_26_9'].iloc[-1]) else 0.0,
-                'histogram': float(macd_df['MACDh_12_26_9'].iloc[-1]) if not pd.isna(macd_df['MACDh_12_26_9'].iloc[-1]) else 0.0,
-                'rsi7': float(rsi7.iloc[-1]) if not pd.isna(rsi7.iloc[-1]) else 0.0,
-                'rsi14': float(rsi14.iloc[-1]) if not pd.isna(rsi14.iloc[-1]) else 0.0,
-                'atr3': float(atr3.iloc[-1]) if not pd.isna(atr3.iloc[-1]) else 0.0,
-                'atr14': float(atr14.iloc[-1]) if not pd.isna(atr14.iloc[-1]) else 0.0,
+                'ema20': float(ema20_values[-1]) if ema20_values else 0.0,
+                'ema50': float(ema50_values[-1]) if ema50_values else 0.0,
+                'macd': float(macd_df['MACD_12_26_9'].iloc[-1]) if macd_df is not None and not pd.isna(macd_df['MACD_12_26_9'].iloc[-1]) else 0.0,
+                'signal': float(macd_df['MACDs_12_26_9'].iloc[-1]) if macd_df is not None and not pd.isna(macd_df['MACDs_12_26_9'].iloc[-1]) else 0.0,
+                'histogram': float(macd_df['MACDh_12_26_9'].iloc[-1]) if macd_df is not None and not pd.isna(macd_df['MACDh_12_26_9'].iloc[-1]) else 0.0,
+                'rsi7': float(rsi7.iloc[-1]) if rsi7 is not None and not pd.isna(rsi7.iloc[-1]) else 0.0,
+                'rsi14': float(rsi14.iloc[-1]) if rsi14 is not None and not pd.isna(rsi14.iloc[-1]) else 0.0,
+                'atr3': float(atr3.iloc[-1]) if atr3 is not None and not pd.isna(atr3.iloc[-1]) else 0.0,
+                'atr14': float(atr14.iloc[-1]) if atr14 is not None and not pd.isna(atr14.iloc[-1]) else 0.0,
             }
             
             logger.info("成功获取最新指标值")

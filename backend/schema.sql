@@ -42,6 +42,17 @@ CREATE TABLE trading_sessions (
     winning_trades INTEGER DEFAULT 0,
     losing_trades INTEGER DEFAULT 0,
     
+    -- 后台交易运行状态
+    background_status VARCHAR(20) DEFAULT 'idle' CHECK (background_status IN ('idle', 'starting', 'running', 'stopping', 'stopped', 'crashed')),
+    background_started_at TIMESTAMPTZ,
+    background_stopped_at TIMESTAMPTZ,
+    last_decision_time TIMESTAMPTZ,
+    decision_count INTEGER DEFAULT 0,
+    decision_interval INTEGER DEFAULT 180,
+    trading_symbols TEXT[],
+    last_error TEXT,
+    trading_params JSONB,
+    
     -- 配置信息
     config JSONB,
     
@@ -62,6 +73,15 @@ COMMENT ON COLUMN trading_sessions.current_capital IS '当前资金（实时更�
 COMMENT ON COLUMN trading_sessions.final_capital IS '最终资金';
 COMMENT ON COLUMN trading_sessions.total_pnl IS '总盈亏';
 COMMENT ON COLUMN trading_sessions.total_return_pct IS '总收益率 (%)';
+COMMENT ON COLUMN trading_sessions.background_status IS '后台运行状态: idle, starting, running, stopping, stopped, crashed';
+COMMENT ON COLUMN trading_sessions.background_started_at IS '后台启动时间';
+COMMENT ON COLUMN trading_sessions.background_stopped_at IS '后台停止时间';
+COMMENT ON COLUMN trading_sessions.last_decision_time IS '最后决策时间';
+COMMENT ON COLUMN trading_sessions.decision_count IS '决策执行次数';
+COMMENT ON COLUMN trading_sessions.decision_interval IS '决策间隔（秒）';
+COMMENT ON COLUMN trading_sessions.trading_symbols IS '交易对列表';
+COMMENT ON COLUMN trading_sessions.last_error IS '最后的错误信息';
+COMMENT ON COLUMN trading_sessions.trading_params IS '交易参数（JSON格式，包含 risk_params 等）';
 COMMENT ON COLUMN trading_sessions.config IS '运行配置（JSON格式）';
 
 
@@ -152,7 +172,7 @@ CREATE TABLE ai_decisions (
     decision_type VARCHAR(20) CHECK (decision_type IN ('buy', 'sell', 'hold', 'rebalance', 'close')),
     confidence NUMERIC(5, 4),
     
-    -- AI 输入/输出
+    -- AI 输入/输出（TEXT类型无长度限制，可存储完整内容）
     prompt_data JSONB,
     ai_response TEXT,
     reasoning TEXT,

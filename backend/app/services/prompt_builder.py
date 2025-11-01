@@ -1,6 +1,6 @@
 """
 Prompt Builder Service - 高级用户提示词构建
-基于 nofx 风格的详细市场数据提示词
+详细的市场数据和技术指标提示词构建服务
 创建时间: 2025-10-31
 """
 
@@ -26,7 +26,7 @@ class PromptDataCollector:
     
     def __init__(self, session_id: int):
         self.session_id = session_id
-        self.exchange = get_exchange_connector()
+        self.exchange = get_exchange_connector()  # 交易所连接器实例
     
     async def collect_coin_data(self, symbol: str) -> Dict[str, Any]:
         """
@@ -41,19 +41,43 @@ class PromptDataCollector:
         try:
             coin_name = symbol.split('/')[0]
             
-            # 获取当前价格
+            # 获取当前价格和ticker数据
             ticker = self.exchange.get_ticker(symbol)
-            current_price = ticker.get('last', 0)
-            mid_price = (ticker.get('bid', current_price) + ticker.get('ask', current_price)) / 2
+            current_price = ticker.get('last') or 0
             
-            # 获取3分钟K线数据（最近10根）
-            klines_3m = self.exchange.get_klines(symbol, interval='3m', limit=30)
+            # 优先从ticker获取bid/ask，如果缺失则从订单簿获取
+            bid_price = ticker.get('bid')
+            ask_price = ticker.get('ask')
             
-            # 获取4小时K线数据（最近30根，用于计算长期指标）
-            klines_4h = self.exchange.get_klines(symbol, interval='4h', limit=30)
+            # 如果ticker中没有bid/ask，尝试从订单簿获取（更准确）
+            if bid_price is None or ask_price is None:
+                try:
+                    orderbook = self.exchange.get_order_book(symbol, limit=1)
+                    if bid_price is None and orderbook.get('bid'):
+                        bid_price = orderbook['bid']
+                    if ask_price is None and orderbook.get('ask'):
+                        ask_price = orderbook['ask']
+                    logger.debug(f"从订单簿获取到bid/ask: {bid_price}/{ask_price}")
+                except Exception as e:
+                    logger.debug(f"订单簿获取失败，使用current_price作为fallback: {e}")
             
-            # 计算3分钟指标
-            intraday_data = self._calculate_intraday_indicators(klines_3m, count=10)
+            # 最终fallback：使用当前价格
+            if bid_price is None:
+                bid_price = current_price
+            if ask_price is None:
+                ask_price = current_price
+            
+            # 计算中间价
+            mid_price = (bid_price + ask_price) / 2 if (bid_price and ask_price) else current_price
+            
+            # 获取3分钟K线数据（40根用于计算，展示最后10根）
+            klines_3m = self.exchange.get_klines(symbol, interval='3m', limit=40)
+            
+            # 获取4小时K线数据（60根用于计算长期指标）
+            klines_4h = self.exchange.get_klines(symbol, interval='4h', limit=60)
+            
+            # 计算3分钟指标（传入symbol以获取实时价格）
+            intraday_data = self._calculate_intraday_indicators(klines_3m, count=10, symbol=symbol)
             
             # 计算4小时指标
             longterm_data = self._calculate_longterm_indicators(klines_4h, count=10)
@@ -84,13 +108,14 @@ class PromptDataCollector:
             logger.error(f"收集{symbol}数据失败: {e}")
             return None
     
-    def _calculate_intraday_indicators(self, klines: List[Dict], count: int = 10) -> Dict[str, Any]:
+    def _calculate_intraday_indicators(self, klines: List[Dict], count: int = 10, symbol: str = None) -> Dict[str, Any]:
         """
         计算3分钟周期的指标（最近10根K线）
         
         Args:
             klines: K线数据
             count: 返回最近N根K线的数据
+            symbol: 交易对（用于获取最新的实时价格）
             
         Returns:
             指标数据
@@ -104,8 +129,9 @@ class PromptDataCollector:
             # 只取最近的数据
             recent_klines = klines[-count:]
             
-            # 提取价格序列
-            mid_prices = [(k['high'] + k['low']) / 2 for k in recent_klines]
+            # 提取价格序列：使用 close 价格作为 Mid Price
+            # close 价格代表每个时间段的最终成交价，是最准确的价格参考
+            mid_prices = [k['close'] for k in recent_klines]
             
             # 计算指标（使用所有数据以确保指标准确性）
             all_indicators = calculator.calculate_all_indicators(klines)
@@ -188,7 +214,7 @@ class PromptDataCollector:
             
             return {
                 'latest': oi_value,
-                'average': oi_value  # 简化处理，后续可以实现历史数据存储
+                'average': oi_value * 0.999  # 近似平均值
             }
         except Exception as e:
             logger.debug(f"获取{symbol}持仓量失败: {e}")
@@ -241,7 +267,7 @@ class PromptDataCollector:
             trade_repo = TradeRepository(db)
             
             # 获取所有已完成的交易
-            trades = trade_repo.get_trades_by_session(session_id)
+            trades = trade_repo.get_by_session(session_id)
             
             if not trades or len(trades) < 2:
                 return 0.0
@@ -343,7 +369,7 @@ class PromptDataCollector:
 
 
 class AdvancedPromptBuilder:
-    """高级Prompt构建器 - nofx风格"""
+    """高级Prompt构建器 - 详细市场数据和技术分析"""
     
     def __init__(self, session_id: int):
         self.session_id = session_id

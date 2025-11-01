@@ -12,7 +12,7 @@ from datetime import datetime
 class RunAgentRequest(BaseModel):
     """运行 Agent 请求（定时循环版本）"""
     symbols: List[str] = Field(
-        default=["BTC/USDT:USDT"],
+        default=["BTC/USDT:USDT", "ETH/USDT:USDT", "BNB/USDT:USDT"],
         description="交易对列表"
     )
     risk_params: Optional[Dict[str, Any]] = Field(
@@ -60,7 +60,7 @@ class BackgroundAgentStatus(BaseModel):
 class StartBackgroundAgentRequest(BaseModel):
     """启动后台 Agent 请求（定时循环模式）"""
     symbols: List[str] = Field(
-        default=["BTC/USDT:USDT"],
+        default=["BTC/USDT:USDT", "ETH/USDT:USDT", "BNB/USDT:USDT"],
         description="交易对列表"
     )
     risk_params: Optional[Dict[str, Any]] = Field(

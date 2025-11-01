@@ -140,6 +140,23 @@ class TradeRepository(BaseRepository[Trade]):
             .limit(limit)\
             .all()
     
+    def get_trades_by_session(
+        self,
+        session_id: int,
+        limit: int = 100
+    ) -> List[Trade]:
+        """
+        获取指定会话的所有交易（别名方法）
+        
+        Args:
+            session_id: 会话 ID
+            limit: 返回数量
+            
+        Returns:
+            交易记录列表
+        """
+        return self.get_by_session(session_id, limit)
+    
     def get_session_statistics(self, session_id: int) -> dict:
         """
         获取会话的交易统计

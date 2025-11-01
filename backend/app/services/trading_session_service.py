@@ -208,6 +208,47 @@ class TradingSessionService:
                 "config": session.config,
                 "notes": session.notes
             },
+            "positions": [
+                {
+                    "id": p.id,
+                    "symbol": p.symbol,
+                    "side": p.side,
+                    "quantity": float(p.quantity) if p.quantity else 0,
+                    "entry_price": float(p.entry_price) if p.entry_price else 0,
+                    "current_price": float(p.current_price) if p.current_price else 0,
+                    "unrealized_pnl": float(p.unrealized_pnl) if p.unrealized_pnl else 0,
+                    "unrealized_pnl_pct": float(p.unrealized_pnl) / float(p.entry_price * p.quantity) * 100 if p.entry_price and p.quantity and float(p.entry_price * p.quantity) != 0 else 0,
+                    "status": p.status,
+                    "leverage": p.leverage,
+                    "created_at": p.created_at.isoformat() if p.created_at else None
+                }
+                for p in positions
+            ],
+            "trades": [
+                {
+                    "id": t.id,
+                    "symbol": t.symbol,
+                    "side": t.side,
+                    "quantity": float(t.quantity) if t.quantity else 0,
+                    "price": float(t.price) if t.price else 0,
+                    "status": t.status,
+                    "order_type": t.order_type,
+                    "created_at": t.created_at.isoformat() if t.created_at else None,
+                    "executed_at": t.executed_at.isoformat() if t.executed_at else None
+                }
+                for t in trades
+            ],
+            "decisions": [
+                {
+                    "id": d.id,
+                    "decision_type": d.decision_type,
+                    "symbols": d.symbols,
+                    "confidence": float(d.confidence) if d.confidence else None,
+                    "reasoning": d.reasoning,
+                    "created_at": d.created_at.isoformat() if d.created_at else None
+                }
+                for d in decisions
+            ],
             "statistics": {
                 "active_positions_count": len(active_positions),
                 "total_positions_count": len(positions),

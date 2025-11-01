@@ -1,6 +1,11 @@
 """
 CryptoGo - FastAPI 主应用
 """
+import asyncio
+import signal
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -19,13 +24,125 @@ from app.api.v1.routes import api_v1_router
 # 初始化 Loguru 日志系统
 logger = setup_logging()
 
-# 创建 FastAPI 应用
+
+# ============================================
+# 应用生命周期管理（替代 startup/shutdown）
+# ============================================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """
+    应用生命周期管理
+    
+    这个函数替代了旧的 @app.on_event("startup") 和 @app.on_event("shutdown")
+    提供更可靠的资源管理和优雅关闭
+    """
+    # ============ 启动阶段 ============
+    logger.info("=" * 80)
+    logger.info(f"🚀 {settings.APP_NAME} v{settings.VERSION} 启动中...")
+    logger.info(f"📊 交易所: {settings.EXCHANGE}")
+    logger.info(f"📈 默认交易对: {settings.DEFAULT_SYMBOL}")
+    logger.info(f"🌐 CORS 允许的源: {settings.CORS_ORIGINS}")
+    logger.info("=" * 80)
+    
+    # 初始化数据库
+    try:
+        from app.utils.database import init_db
+        init_db()
+        logger.info("✅ 数据库初始化成功")
+    except Exception as e:
+        logger.warning(f"⚠️ 数据库初始化失败: {str(e)}")
+    
+    # 测试交易所连接
+    try:
+        from app.services.data_collector import get_exchange_connector
+        connector = get_exchange_connector()
+        logger.info(f"✅ 交易所 {connector.exchange_id} 连接成功")
+    except Exception as e:
+        logger.error(f"❌ 交易所连接失败: {str(e)}")
+    
+    # 初始化后台 Agent 管理器
+    from app.services.trading_agent_service import get_background_agent_manager
+    manager = get_background_agent_manager()
+    logger.info("✅ 后台 Agent 管理器已初始化")
+    logger.info("=" * 80)
+    
+    # yield 后的代码在关闭时执行
+    yield
+    
+    # ============ 关闭阶段 ============
+    logger.info("=" * 80)
+    logger.info(f"👋 {settings.APP_NAME} 正在关闭...")
+    logger.info("=" * 80)
+    
+    # 优雅关闭所有后台 Agent
+    try:
+        from app.services.trading_session_service import TradingSessionService
+        from app.utils.database import get_db
+        
+        logger.info("🛑 开始停止所有后台 Agent...")
+        running_agents = manager.list_agents()
+        logger.info(f"📌 找到 {len(running_agents)} 个运行中的 Agent")
+        
+        # 设置关闭超时时间
+        shutdown_timeout = 30  # 30秒超时
+        
+        for idx, agent_status in enumerate(running_agents, 1):
+            if agent_status:
+                session_id = agent_status['session_id']
+                logger.info("-" * 60)
+                logger.info(f"🔧 [{idx}/{len(running_agents)}] 停止 Session {session_id}")
+                logger.info(f"   状态: {agent_status.get('status')}")
+                logger.info(f"   运行次数: {agent_status.get('run_count')}")
+                
+                try:
+                    # 异步停止 Agent（带超时）
+                    await asyncio.wait_for(
+                        manager.stop_background_agent(session_id),
+                        timeout=shutdown_timeout
+                    )
+                    logger.info(f"✅ Agent 已停止 (Session {session_id})")
+                    
+                    # 更新会话状态
+                    db = next(get_db())
+                    try:
+                        session_service = TradingSessionService(db)
+                        session_service.end_session(
+                            session_id=session_id,
+                            status='stopped',
+                            notes='应用关闭时自动结束'
+                        )
+                        logger.info(f"✅ 会话已关闭 (Session {session_id})")
+                    except Exception as e:
+                        logger.error(f"❌ 关闭会话失败 (Session {session_id}): {str(e)}")
+                    finally:
+                        db.close()
+                        
+                except asyncio.TimeoutError:
+                    logger.error(f"⏱️ 停止 Agent 超时 (Session {session_id})，强制取消")
+                except Exception as e:
+                    logger.error(f"❌ 停止 Agent 失败 (Session {session_id}): {str(e)}")
+                    logger.exception("详细错误:")
+        
+        logger.info("=" * 80)
+        logger.info("✅ 所有后台 Agent 已停止")
+        logger.info("=" * 80)
+        
+    except Exception as e:
+        logger.error(f"❌ 关闭过程异常: {str(e)}")
+        logger.exception("详细错误:")
+    
+    logger.info(f"👋 {settings.APP_NAME} 已关闭")
+
+
+# 创建 FastAPI 应用（使用 lifespan）
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.VERSION,
     description="基于大语言模型的智能加密货币交易系统",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=lifespan  # 使用新的 lifespan 管理器
 )
 
 # 配置 CORS
@@ -191,88 +308,21 @@ async def health():
     }
 
 
-@app.on_event("startup")
-async def startup_event():
-    """应用启动事件"""
-    logger.info(f"🚀 {settings.APP_NAME} v{settings.VERSION} 启动中...")
-    logger.info(f"📊 交易所: {settings.EXCHANGE}")
-    logger.info(f"📈 默认交易对: {settings.DEFAULT_SYMBOL}")
-    logger.info(f"🌐 CORS 允许的源: {settings.CORS_ORIGINS}")
-    
-    # 初始化数据库
-    try:
-        from app.utils.database import init_db
-        init_db()
-        logger.info("✅ 数据库初始化成功")
-    except Exception as e:
-        logger.warning(f"⚠️ 数据库初始化失败: {str(e)}")
-    
-    # 测试交易所连接
-    try:
-        from app.services.data_collector import get_exchange_connector
-        connector = get_exchange_connector()
-        logger.info(f"✅ 交易所 {connector.exchange_id} 连接成功")
-    except Exception as e:
-        logger.error(f"❌ 交易所连接失败: {str(e)}")
+# ============================================
+# 信号处理（优雅关闭）
+# ============================================
 
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """应用关闭事件"""
-    logger.info(f"👋 {settings.APP_NAME} 正在关闭...")
-    logger.info("=" * 80)
+def setup_signal_handlers():
+    """设置信号处理器，确保优雅关闭"""
+    def signal_handler(signum, frame):
+        sig_name = signal.Signals(signum).name
+        logger.info(f"📡 收到信号: {sig_name} ({signum})")
+        logger.info("🛑 开始优雅关闭...")
     
-    # 停止所有后台运行的 Agent 并关闭对应的会话
-    try:
-        from app.services.trading_agent_service import get_background_agent_manager
-        from app.services.trading_session_service import TradingSessionService
-        from app.utils.database import get_db
-        
-        manager = get_background_agent_manager()
-        running_agents = manager.list_agents()
-        logger.info(f"📌 找到 {len(running_agents)} 个运行中的 Agent")
-        
-        for idx, agent_status in enumerate(running_agents, 1):
-            if agent_status:
-                session_id = agent_status['session_id']
-                logger.info("=" * 80)
-                logger.info(f"🔧 处理 Agent [{idx}/{len(running_agents)}] (Session {session_id})...")
-                logger.info(f"   状态: {agent_status.get('status')}")
-                logger.info(f"   运行次数: {agent_status.get('run_count')}")
-                logger.info(f"   线程存活: {agent_status.get('is_alive')}")
-                
-                try:
-                    # 停止 Agent
-                    logger.info(f"⏹️ 调用 stop_background_agent({session_id})...")
-                    manager.stop_background_agent(session_id)
-                    logger.info(f"✅ stop_background_agent 返回成功")
-                    
-                    # 关闭会话
-                    logger.info(f"💾 开始关闭会话 {session_id}...")
-                    db = next(get_db())
-                    try:
-                        session_service = TradingSessionService(db)
-                        session_service.end_session(
-                            session_id=session_id,
-                            status='stopped',
-                            notes='应用关闭时自动结束'
-                        )
-                        logger.info(f"✅ 会话 {session_id} 已关闭")
-                    except Exception as e:
-                        logger.error(f"❌ 关闭会话 {session_id} 失败: {str(e)}")
-                    finally:
-                        db.close()
-                        
-                except Exception as e:
-                    logger.error(f"❌ 停止 Agent/会话失败: {str(e)}")
-                    logger.exception("详细错误信息:")
-        
-        logger.info("=" * 80)
-        logger.info("✅ 所有后台 Agent 和会话已停止")
-        logger.info("=" * 80)
-    except Exception as e:
-        logger.error(f"❌ 关闭过程失败: {str(e)}")
-        logger.exception("详细错误信息:")
+    # 注册信号处理器
+    signal.signal(signal.SIGINT, signal_handler)   # Ctrl+C
+    signal.signal(signal.SIGTERM, signal_handler)  # kill
+    logger.info("✅ 信号处理器已注册 (SIGINT, SIGTERM)")
 
 
 if __name__ == "__main__":

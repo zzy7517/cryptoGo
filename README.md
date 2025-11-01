@@ -97,19 +97,6 @@ npm run dev
 ### 3. 访问地址
 
 - **主页**: http://localhost:3000
-- **交易监控**: http://localhost:3000/trading
-- **API 文档**: http://localhost:9527/docs
-
-## 💡 使用方法
-
-1. 访问主页 http://localhost:3000
-2. 点击"开始交易"按钮，配置初始资金和决策间隔
-3. 系统自动创建交易会话并启动AI Agent
-4. 在交易监控页面查看：
-   - AI决策记录（包括开仓/平仓决策、理由、置信度）
-   - 当前持仓情况（多空方向、盈亏状态）
-   - Agent运行状态（循环次数、决策间隔）
-5. 可随时停止Agent或结束会话
 
 ## 📋 开发计划
 [TODO.md](./TODO.md)

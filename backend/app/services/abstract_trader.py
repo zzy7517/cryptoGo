@@ -103,24 +103,19 @@ class AbstractTrader(ABC):
     - 账户信息查询
     """
     
-    def __init__(self, api_key: str, api_secret: str, testnet: bool = True):
+    def __init__(self, api_key: str, api_secret: str):
         """
         初始化交易器
         
         Args:
             api_key: API密钥
             api_secret: API密钥
-            testnet: 是否使用测试网
         """
         self.api_key = api_key
         self.api_secret = api_secret
-        self.testnet = testnet
         self.exchange = None
         
-        logger.info(
-            f"初始化交易器: {self.__class__.__name__}",
-            testnet=testnet
-        )
+        logger.info(f"初始化交易器: {self.__class__.__name__}")
     
     @abstractmethod
     def initialize(self) -> bool:
