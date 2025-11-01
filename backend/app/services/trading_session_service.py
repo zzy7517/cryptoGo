@@ -4,7 +4,7 @@
 创建时间: 2025-10-29
 """
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 
 from ..repositories.trading_session_repo import TradingSessionRepository
@@ -180,6 +180,9 @@ class TradingSessionService:
         # 获取 AI 决策
         decisions = self.decision_repo.get_by_session(session_id)
 
+        # 计算 Hold Times（持仓时间占比）
+        hold_times = self._calculate_hold_times(session, trades)
+
         return {
             "session": {
                 "id": session.id,
@@ -243,7 +246,8 @@ class TradingSessionService:
                 "total_positions_count": len(positions),
                 "total_trades_count": len(trades),
                 "total_decisions_count": len(decisions)
-            }
+            },
+            "hold_times": hold_times
         }
     
     def get_session_list(
@@ -281,5 +285,78 @@ class TradingSessionService:
             "winning_trades": trade_stats["winning_trades"],
             "losing_trades": trade_stats["losing_trades"],
             "total_pnl": trade_stats["total_pnl"]
+        }
+
+    def _calculate_hold_times(self, session: TradingSession, trades: List) -> Dict[str, float]:
+        """
+        计算持仓时间占比
+
+        Args:
+            session: 交易会话
+            trades: 交易记录列表
+
+        Returns:
+            {
+                "long_pct": 做多时间占比,
+                "short_pct": 做空时间占比,
+                "flat_pct": 空仓时间占比
+            }
+        """
+        # 计算会话总时长
+        session_start = session.created_at
+        session_end = session.ended_at if session.ended_at else datetime.now(timezone.utc)
+
+        # 确保时区一致
+        if session_start.tzinfo is None:
+            session_start = session_start.replace(tzinfo=timezone.utc)
+        if session_end.tzinfo is None:
+            session_end = session_end.replace(tzinfo=timezone.utc)
+
+        total_duration = (session_end - session_start).total_seconds()
+
+        if total_duration <= 0:
+            return {
+                "long_pct": 0.0,
+                "short_pct": 0.0,
+                "flat_pct": 100.0
+            }
+
+        # 统计各状态的持续时间
+        long_duration = 0.0
+        short_duration = 0.0
+
+        for trade in trades:
+            if not trade.entry_time or not trade.exit_time:
+                continue
+
+            # 确保时区一致
+            entry_time = trade.entry_time
+            exit_time = trade.exit_time
+
+            if entry_time.tzinfo is None:
+                entry_time = entry_time.replace(tzinfo=timezone.utc)
+            if exit_time.tzinfo is None:
+                exit_time = exit_time.replace(tzinfo=timezone.utc)
+
+            # 计算该交易的持续时间
+            duration = (exit_time - entry_time).total_seconds()
+
+            if trade.side == 'long':
+                long_duration += duration
+            elif trade.side == 'short':
+                short_duration += duration
+
+        # 计算百分比
+        long_pct = (long_duration / total_duration * 100) if total_duration > 0 else 0
+        short_pct = (short_duration / total_duration * 100) if total_duration > 0 else 0
+        flat_pct = 100 - long_pct - short_pct
+
+        # 确保百分比不为负数（可能因为重叠持仓）
+        flat_pct = max(0, flat_pct)
+
+        return {
+            "long_pct": round(long_pct, 1),
+            "short_pct": round(short_pct, 1),
+            "flat_pct": round(flat_pct, 1)
         }
 

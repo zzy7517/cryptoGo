@@ -1,6 +1,14 @@
--- CryptoGo 数据库表结构 V2
+-- CryptoGo 数据库表结构 V3
 -- 在 Supabase SQL Editor 中执行此脚本
 -- 本脚本会删除现有表并重新创建
+--
+-- 更新日志 V3 (2025-11-01):
+-- 1. 修改 trades 表，优化为完整交易周期记录（只在平仓时创建）
+-- 2. 新增字段：entry_price, exit_price, entry_fee, exit_fee, total_fees
+-- 3. 新增字段：entry_order_id, exit_order_id
+-- 4. 修改 side 约束：只允许 'long' 和 'short'（移除 'buy' 和 'sell'）
+-- 5. 修改 pnl 为 NOT NULL（已平仓的交易必须有盈亏）
+-- 6. 新增索引：idx_trade_entry_time, idx_trade_exit_time
 
 -- ============================================
 -- 清理现有表（按依赖关系倒序删除）
@@ -139,69 +147,85 @@ COMMENT ON COLUMN ai_decisions.execution_result IS '执行结果（JSON格式）
 CREATE TABLE trades (
     id BIGSERIAL PRIMARY KEY,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    
+
     -- 关联会话
     session_id BIGINT REFERENCES trading_sessions(id) ON DELETE CASCADE,
-    
+
     -- 交易信息
     symbol VARCHAR(20) NOT NULL,
-    side VARCHAR(10) NOT NULL CHECK (side IN ('buy', 'sell', 'long', 'short')),
+    side VARCHAR(10) NOT NULL CHECK (side IN ('long', 'short')),
     order_type VARCHAR(20) CHECK (order_type IN ('market', 'limit', 'stop', 'stop_limit')),
-    
+
     -- 数量和价格
     quantity NUMERIC(20, 8) NOT NULL,
-    price NUMERIC(20, 4) NOT NULL,
+    entry_price NUMERIC(20, 4) NOT NULL,
+    exit_price NUMERIC(20, 4),
+    price NUMERIC(20, 4) NOT NULL,  -- 向后兼容字段（等同于 entry_price）
     total_value NUMERIC(20, 4) NOT NULL,
     leverage INTEGER DEFAULT 1,
-    
+
     -- 名义价值（用于杠杆交易）
     notional_entry NUMERIC(20, 4),
     notional_exit NUMERIC(20, 4),
-    
+
     -- 时间信息（用于计算持仓时长）
     entry_time TIMESTAMPTZ,
     exit_time TIMESTAMPTZ,
     holding_duration INTERVAL,
-    
+
     -- 费用
-    fee NUMERIC(20, 8),
+    entry_fee NUMERIC(20, 8),
+    exit_fee NUMERIC(20, 8),
+    total_fees NUMERIC(20, 8),
+    fee NUMERIC(20, 8),  -- 向后兼容字段
     fee_currency VARCHAR(10),
-    
-    -- 盈亏（仅平仓时）
-    pnl NUMERIC(20, 4),
+
+    -- 盈亏（平仓时计算）
+    pnl NUMERIC(20, 4) NOT NULL,
     pnl_pct NUMERIC(10, 4),
 
     -- 关联
     ai_decision_id BIGINT,
-    exchange_order_id VARCHAR(100)
+    entry_order_id VARCHAR(100),
+    exit_order_id VARCHAR(100),
+    exchange_order_id VARCHAR(100)  -- 向后兼容字段
 );
 
 -- 索引
 CREATE INDEX idx_trade_session ON trades(session_id);
 CREATE INDEX idx_trade_symbol_created ON trades(symbol, created_at);
 CREATE INDEX idx_trade_created_at ON trades(created_at);
+CREATE INDEX idx_trade_entry_time ON trades(entry_time);
+CREATE INDEX idx_trade_exit_time ON trades(exit_time);
 
 -- 注释
-COMMENT ON TABLE trades IS '交易记录表';
+COMMENT ON TABLE trades IS '交易记录表 - 只在平仓时创建记录，记录完整交易周期';
 COMMENT ON COLUMN trades.session_id IS '所属交易会话ID';
 COMMENT ON COLUMN trades.symbol IS '交易对符号';
-COMMENT ON COLUMN trades.side IS '方向: buy, sell, long, short';
+COMMENT ON COLUMN trades.side IS '持仓方向: long(多头), short(空头)';
 COMMENT ON COLUMN trades.order_type IS '订单类型: market, limit, stop, stop_limit';
 COMMENT ON COLUMN trades.quantity IS '交易数量';
-COMMENT ON COLUMN trades.price IS '成交价格';
+COMMENT ON COLUMN trades.entry_price IS '开仓价格';
+COMMENT ON COLUMN trades.exit_price IS '平仓价格';
+COMMENT ON COLUMN trades.price IS '成交价格（向后兼容，等同于entry_price）';
 COMMENT ON COLUMN trades.total_value IS '总价值';
 COMMENT ON COLUMN trades.leverage IS '使用的杠杆倍数';
-COMMENT ON COLUMN trades.notional_entry IS '名义入场价值';
-COMMENT ON COLUMN trades.notional_exit IS '名义出场价值';
+COMMENT ON COLUMN trades.notional_entry IS '开仓名义价值';
+COMMENT ON COLUMN trades.notional_exit IS '平仓名义价值';
 COMMENT ON COLUMN trades.entry_time IS '开仓时间';
 COMMENT ON COLUMN trades.exit_time IS '平仓时间';
-COMMENT ON COLUMN trades.holding_duration IS '持仓时长（仅已平仓交易）';
-COMMENT ON COLUMN trades.fee IS '手续费';
+COMMENT ON COLUMN trades.holding_duration IS '持仓时长';
+COMMENT ON COLUMN trades.entry_fee IS '开仓手续费';
+COMMENT ON COLUMN trades.exit_fee IS '平仓手续费';
+COMMENT ON COLUMN trades.total_fees IS '总手续费（entry_fee + exit_fee）';
+COMMENT ON COLUMN trades.fee IS '手续费（向后兼容）';
 COMMENT ON COLUMN trades.fee_currency IS '手续费币种';
-COMMENT ON COLUMN trades.pnl IS '盈亏金额';
+COMMENT ON COLUMN trades.pnl IS '净盈亏金额（扣除手续费）';
 COMMENT ON COLUMN trades.pnl_pct IS '盈亏百分比';
 COMMENT ON COLUMN trades.ai_decision_id IS '关联的AI决策ID';
-COMMENT ON COLUMN trades.exchange_order_id IS '交易所订单ID';
+COMMENT ON COLUMN trades.entry_order_id IS '开仓订单ID';
+COMMENT ON COLUMN trades.exit_order_id IS '平仓订单ID';
+COMMENT ON COLUMN trades.exchange_order_id IS '交易所订单ID（向后兼容）';
 
 
 -- ============================================

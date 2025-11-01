@@ -34,31 +34,8 @@ const apiClient = axios.create({
 /**
  * Agent API
  * 交易代理控制 API
- * 更新时间: 2025-11-01
  */
 export const agentApi = {
-  /**
-   * 启动后台挂机代理（定时循环模式）
-   *
-   * 使用定时循环机制，每个周期独立执行：
-   * - 默认间隔：180秒（3分钟）
-   * - 可通过 risk_params.decision_interval 自定义间隔
-   */
-  startAgent: async (
-    sessionId: number,
-    params: {
-      symbols?: string[];
-      risk_params?: Record<string, any>; // 可包含 decision_interval 字段
-      model?: string;
-    }
-  ): Promise<any> => {
-    const response = await apiClient.post(
-      API_ROUTES.AGENT.START_BACKGROUND(sessionId),
-      params
-    );
-    return response.data;
-  },
-
   /**
    * 获取后台代理状态
    */

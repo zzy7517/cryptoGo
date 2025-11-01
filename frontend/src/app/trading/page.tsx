@@ -11,16 +11,6 @@
  * - 前置条件: 必须有活跃的交易会话
  * - 如果没有活跃会话，自动跳转到首页(/)进行配置
  *
- * 主要功能：
- * 1. 会话状态显示 - 显示当前运行的交易会话信息
- * 2. 结束交易会话 - 手动结束当前会话
- * 3. Agent 状态监控 - 实时显示 Agent 运行状态和循环次数
- * 4. 交易监控 - 查看AI决策、持仓、资金变化
- *
- * 状态管理：
- * - 使用 Zustand 管理会话状态
- * - 定时轮询 Agent 运行状态
- * - 自动重定向：无活跃会话时跳转到首页
  */
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';

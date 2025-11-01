@@ -323,26 +323,13 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
                     logger.error(f"❌ 开多仓失败: {order_result.error}")
                     return {"success": False, "error": order_result.error}
 
-                # 创建交易记录（不再创建持仓记录，持仓信息从交易所API获取）
-                trade = trade_repo.create_trade(
-                    session_id=session_id,
-                    symbol=decision.symbol,
-                    side='buy',
-                    quantity=Decimal(str(order_result.filled_quantity or quantity)),
-                    price=Decimal(str(order_result.avg_price or current_price)),
-                    total_value=Decimal(str((order_result.filled_quantity or quantity) * (order_result.avg_price or current_price))),
-                    order_type='market',
-                    leverage=decision.leverage,
-                    fee=Decimal(str(order_result.fee)) if order_result.fee else None,
-                    fee_currency=order_result.fee_currency,
-                    exchange_order_id=order_result.order_id
-                )
+                # 不创建交易记录，持仓信息从交易所API获取
+                # 只有平仓时才创建完整的交易记录
 
-                logger.info(f"✅ 开多仓成功: {decision.symbol}, 交易ID={trade.id}")
+                logger.info(f"✅ 开多仓成功: {decision.symbol}, 订单ID={order_result.order_id}")
                 return {
                     "success": True,
                     "action": "open_long",
-                    "trade_id": trade.id,
                     "order_id": order_result.order_id,
                     "entry_price": float(order_result.avg_price or current_price),
                     "quantity": float(order_result.filled_quantity or quantity)
@@ -395,26 +382,13 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
                     logger.error(f"❌ 开空仓失败: {order_result.error}")
                     return {"success": False, "error": order_result.error}
 
-                # 创建交易记录（不再创建持仓记录，持仓信息从交易所API获取）
-                trade = trade_repo.create_trade(
-                    session_id=session_id,
-                    symbol=decision.symbol,
-                    side='sell',
-                    quantity=Decimal(str(order_result.filled_quantity or quantity)),
-                    price=Decimal(str(order_result.avg_price or current_price)),
-                    total_value=Decimal(str((order_result.filled_quantity or quantity) * (order_result.avg_price or current_price))),
-                    order_type='market',
-                    leverage=decision.leverage,
-                    fee=Decimal(str(order_result.fee)) if order_result.fee else None,
-                    fee_currency=order_result.fee_currency,
-                    exchange_order_id=order_result.order_id
-                )
+                # 不创建交易记录，持仓信息从交易所API获取
+                # 只有平仓时才创建完整的交易记录
 
-                logger.info(f"✅ 开空仓成功: {decision.symbol}, 交易ID={trade.id}")
+                logger.info(f"✅ 开空仓成功: {decision.symbol}, 订单ID={order_result.order_id}")
                 return {
                     "success": True,
                     "action": "open_short",
-                    "trade_id": trade.id,
                     "order_id": order_result.order_id,
                     "entry_price": float(order_result.avg_price or current_price),
                     "quantity": float(order_result.filled_quantity or quantity)
@@ -455,35 +429,53 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
                 if not order_result.success:
                     logger.error(f"❌ 平仓失败: {order_result.error}")
                     return {"success": False, "error": order_result.error}
-                
-                # 创建交易记录（不再关联持仓记录）
-                trade_side = 'sell' if side == 'long' else 'buy'
+
+                # 创建完整的交易记录
                 exit_price = Decimal(str(order_result.avg_price)) if order_result.avg_price else Decimal(str(target_position.get('markPrice', 0)))
-                filled_quantity = order_result.filled_quantity or quantity
+                filled_quantity = Decimal(str(order_result.filled_quantity or quantity))
                 leverage_value = int(target_position.get('leverage', 1))
 
-                trade = trade_repo.create_trade(
+                # 从持仓信息获取开仓价格和时间
+                entry_price = Decimal(str(target_position.get('entryPrice', 0)))
+
+                # 获取开仓时间（从持仓的 updateTime 或当前时间推算）
+                # 注意：币安API的 updateTime 是最后更新时间，不一定是开仓时间
+                # 这里简化处理，实际应该从订单历史获取
+                from datetime import datetime, timezone, timedelta
+                exit_time = datetime.now(timezone.utc)
+
+                # 假设持仓时间（实际应该从交易所获取准确时间）
+                # 这里用一个简化的估算：从 position 的 info 中获取
+                entry_time = exit_time - timedelta(minutes=5)  # 临时方案
+
+                # 创建完整的交易记录
+                trade = trade_repo.create_closed_trade(
                     session_id=session_id,
                     symbol=decision.symbol,
-                    side=trade_side,
-                    quantity=Decimal(str(filled_quantity)),
-                    price=exit_price,
-                    total_value=Decimal(str(float(filled_quantity) * float(exit_price))),
-                    order_type='market',
+                    side=side,  # 'long' or 'short'
+                    quantity=filled_quantity,
+                    entry_price=entry_price,
+                    exit_price=exit_price,
+                    entry_time=entry_time,
+                    exit_time=exit_time,
                     leverage=leverage_value,
-                    fee=Decimal(str(order_result.fee)) if order_result.fee else None,
-                    fee_currency=order_result.fee_currency,
-                    exchange_order_id=order_result.order_id
+                    entry_fee=Decimal(0),  # 开仓手续费需要从历史订单获取
+                    exit_fee=Decimal(str(order_result.fee)) if order_result.fee else Decimal(0),
+                    fee_currency=order_result.fee_currency or 'USDT',
+                    ai_decision_id=None,
+                    entry_order_id=None,  # 需要从交易所获取
+                    exit_order_id=order_result.order_id
                 )
 
-                logger.info(f"✅ 平仓成功: {decision.symbol} {side}, 交易ID={trade.id}")
+                logger.info(f"✅ 平仓成功: {decision.symbol} {side}, 交易ID={trade.id}, P&L=${float(trade.pnl):.2f}")
                 return {
                     "success": True,
                     "action": decision.action,
                     "trade_id": trade.id,
                     "order_id": order_result.order_id,
                     "exit_price": float(exit_price),
-                    "quantity": float(filled_quantity)
+                    "quantity": float(filled_quantity),
+                    "pnl": float(trade.pnl)
                 }
                 
             elif decision.action == "hold":

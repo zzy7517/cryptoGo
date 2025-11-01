@@ -70,11 +70,14 @@ session_router.add_api_route(
 agent_router = APIRouter(prefix="/agent", tags=["Agent"])
 
 # POST /api/v1/agent/sessions/{session_id}/start-background - 启动后台Agent
+# 注意：此端点已废弃（2025-11-02），Agent 现在由 session/start 接口自动启动
+# 保留此端点仅供向后兼容或手动启动场景
 agent_router.add_api_route(
     "/sessions/{session_id}/start-background",
     agent_handlers.start_background_agent,
     methods=["POST"],
-    summary="启动后台挂机 Agent"
+    summary="[已废弃] 启动后台挂机 Agent（请使用 session/start 接口）",
+    deprecated=True
 )
 
 # POST /api/v1/agent/sessions/{session_id}/stop-background - 停止后台Agent

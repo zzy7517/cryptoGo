@@ -19,7 +19,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSessionStore } from '@/stores/sessionStore';
-import { agentApi, configApi } from '@/lib/api';
+import { configApi } from '@/lib/api';
 
 export default function Home() {
   const router = useRouter();
@@ -87,30 +87,27 @@ export default function Home() {
 
   const handleStartSession = async () => {
     try {
-      // 检查是否至少选择了一个币种
+      // 检查是否至少选择了一个币种（如果启用了自动启动）
       if (autoStartAgent && selectedSymbols.length === 0) {
         alert('请至少选择一个交易币种');
         return;
       }
 
+      // 一次性创建会话并启动 Agent（由后端统一处理）
       const session = await startSession(
         sessionName || undefined,
-        initialCapital ? parseFloat(initialCapital) : undefined
+        initialCapital ? parseFloat(initialCapital) : undefined,
+        {
+          auto_start_agent: autoStartAgent,
+          symbols: autoStartAgent ? selectedSymbols : undefined,
+          decision_interval: autoStartAgent ? parseInt(decisionInterval) : undefined,
+        }
       );
 
-      // 如果勾选了自动启动 Agent
-      if (autoStartAgent && session?.session_id) {
-        try {
-          // 使用用户选中的币种列表
-          await agentApi.startAgent(session.session_id, {
-            symbols: selectedSymbols,
-            risk_params: {
-              decision_interval: parseInt(decisionInterval),
-            },
-          });
-        } catch (error) {
-          console.error('启动 Agent 失败:', error);
-        }
+      // 如果 Agent 启动失败，给出提示（但不阻止跳转）
+      if (autoStartAgent && session && !session.agent_started && session.agent_error) {
+        console.warn('Agent 启动失败:', session.agent_error);
+        alert(`会话创建成功，但 Agent 启动失败: ${session.agent_error}`);
       }
 
       // 跳转到交易页面
@@ -342,11 +339,6 @@ export default function Home() {
             </span>
             <div className="absolute inset-0 bg-gradient-to-r from-cyan-600 via-teal-600 to-cyan-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
           </button>
-        </div>
-
-        {/* 底部装饰 */}
-        <div className="text-center mt-8 text-gray-400 text-sm">
-          <p>由 Claude AI 驱动 • 安全 • 智能 • 可靠</p>
         </div>
       </div>
 

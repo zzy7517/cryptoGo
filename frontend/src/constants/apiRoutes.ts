@@ -26,7 +26,6 @@ const API_V1 = '/api/v1';
  * Agent 控制相关路由
  */
 export const AGENT_ROUTES = {
-  START_BACKGROUND: (sessionId: number) => `${API_V1}/agent/sessions/${sessionId}/start-background`,
   BACKGROUND_STATUS: (sessionId: number) => `${API_V1}/agent/sessions/${sessionId}/background-status`,
 } as const;
 

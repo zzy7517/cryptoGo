@@ -9,6 +9,11 @@ from ..utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+__all__ = [
+    'get_trader',
+    'reset_trader',
+]
+
 
 # ==================== 单例模式 ====================
 
@@ -34,24 +39,10 @@ def get_trader() -> AbstractExchange:
 def reset_trader():
     """
     重置交易器单例
-    
+
     主要用于测试或需要重新初始化交易器时
     """
     global _trader_instance
     _trader_instance = None
     logger.info("交易器已重置")
-
-
-# ==================== 向后兼容 ====================
-
-# 为了向后兼容，提供旧的函数名
-create_binance_trader_from_config = get_trader
-
-
-__all__ = [
-    'get_trader',
-    'reset_trader',
-    # 向后兼容
-    'create_binance_trader_from_config'
-]
 

@@ -22,29 +22,89 @@ async def start_session(
     db: Session = Depends(get_db)
 ):
     """
-    开始新的交易会话
-    
+    开始新的交易会话（并可选自动启动 Agent）
+
     创建一个新的交易会话。如果已有活跃会话，则返回错误。
+    如果 auto_start_agent=True，则自动启动后台 Agent。
     """
     try:
+        # 1. 创建会话
         service = TradingSessionService(db)
         session = service.start_session(
             session_name=request.session_name,
             initial_capital=request.initial_capital,
             config=request.config
         )
-        
+
+        # 准备响应数据
+        response_data = {
+            "session_id": session.id,
+            "session_name": session.session_name,
+            "status": session.status,
+            "initial_capital": float(session.initial_capital) if session.initial_capital else None,
+            "created_at": session.created_at.isoformat()
+        }
+
+        # 2. 如果需要，自动启动 Agent
+        agent_started = False
+        agent_error = None
+
+        if request.auto_start_agent:
+            try:
+                # 验证必需参数
+                if not request.symbols or len(request.symbols) == 0:
+                    raise ValueError("启动 Agent 需要至少选择一个交易币种")
+
+                # 获取后台 Agent 管理器
+                manager = get_background_agent_manager()
+
+                # 构建风险参数
+                risk_params = request.risk_params or {}
+                risk_params["decision_interval"] = request.decision_interval
+
+                # 启动后台 Agent
+                agent_result = await manager.start_background_agent(
+                    session_id=session.id,
+                    symbols=request.symbols,
+                    risk_params=risk_params,
+                    decision_interval=request.decision_interval
+                )
+
+                agent_started = True
+                response_data["agent_status"] = agent_result
+
+                logger.info(
+                    f"会话 {session.id} 创建成功，Agent 已自动启动",
+                    session_id=session.id,
+                    symbols=request.symbols,
+                    decision_interval=request.decision_interval
+                )
+
+            except Exception as e:
+                # Agent 启动失败不影响会话创建
+                agent_error = str(e)
+                logger.warning(
+                    f"会话 {session.id} 创建成功，但 Agent 启动失败: {agent_error}",
+                    session_id=session.id
+                )
+
+        # 3. 返回响应
+        message = "交易会话已开始"
+        if agent_started:
+            message += "，Agent 已启动"
+        elif agent_error:
+            message += f"，但 Agent 启动失败: {agent_error}"
+
+        response_data["agent_started"] = agent_started
+        if agent_error:
+            response_data["agent_error"] = agent_error
+
         return {
             "success": True,
-            "message": "交易会话已开始",
-            "data": {
-                "session_id": session.id,
-                "session_name": session.session_name,
-                "status": session.status,
-                "initial_capital": float(session.initial_capital) if session.initial_capital else None,
-                "created_at": session.created_at.isoformat()
-            }
+            "message": message,
+            "data": response_data
         }
+
     except BusinessException as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

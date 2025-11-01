@@ -32,6 +32,7 @@ export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
 
   const details = sessionDetails?.data;
   const exchangeData = accountData?.data;
+  const holdTimes = details?.hold_times;
 
   const formatNumber = (num: number | null | undefined, decimals: number = 2): string => {
     if (num === null || num === undefined) return '--';
@@ -157,15 +158,21 @@ export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
             <div className="grid grid-cols-3 gap-4 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">Long:</span>
-                <span className="font-bold text-green-600">--</span>
+                <span className="font-bold text-green-600">
+                  {holdTimes?.long_pct !== undefined ? `${holdTimes.long_pct}%` : '--'}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Short:</span>
-                <span className="font-bold text-red-600">--</span>
+                <span className="font-bold text-red-600">
+                  {holdTimes?.short_pct !== undefined ? `${holdTimes.short_pct}%` : '--'}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Flat:</span>
-                <span className="font-bold text-gray-900">--</span>
+                <span className="font-bold text-gray-900">
+                  {holdTimes?.flat_pct !== undefined ? `${holdTimes.flat_pct}%` : '--'}
+                </span>
               </div>
             </div>
           </div>
@@ -281,15 +288,28 @@ export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
                 </thead>
                 <tbody>
                   {trades.slice(0, 25).map((trade: any) => {
-                    const notional = trade.quantity * trade.price;
-                    const isLong = trade.side === 'buy';
+                    // 格式化持仓时间
+                    const formatHoldingTime = (duration: string | null) => {
+                      if (!duration) return '--';
+                      // duration 格式类似 "0:05:23.123456" 或 "1 day, 2:30:45"
+                      const match = duration.match(/(?:(\d+) day[s]?, )?(\d+):(\d+):(\d+)/);
+                      if (!match) return duration;
+                      const [, days, hours, minutes] = match;
+                      if (days) return `${days}D ${hours}H ${minutes}M`;
+                      if (parseInt(hours) > 0) return `${parseInt(hours)}H ${minutes}M`;
+                      return `${parseInt(minutes)}M`;
+                    };
+
+                    const pnl = trade.pnl || 0;
+                    const isLong = trade.side === 'long';
+
                     return (
                       <tr key={trade.id} className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
                         <td className="py-4 px-6">
                           <span className={`text-sm font-bold uppercase ${
                             isLong ? 'text-green-600' : 'text-red-600'
                           }`}>
-                            {isLong ? 'LONG' : 'SHORT'}
+                            {trade.side}
                           </span>
                         </td>
                         <td className="py-4 px-6">
@@ -301,28 +321,30 @@ export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
                           </div>
                         </td>
                         <td className="py-4 px-6 text-right font-mono text-sm text-gray-900">
-                          ${formatNumber(trade.price, 2)}
+                          ${formatNumber(trade.entry_price || trade.price, 2)}
                         </td>
                         <td className="py-4 px-6 text-right font-mono text-sm text-gray-900">
-                          ${formatNumber(trade.price, 2)}
+                          ${formatNumber(trade.exit_price || trade.price, 2)}
                         </td>
                         <td className="py-4 px-6 text-right font-mono text-sm text-gray-900">
                           {formatNumber(trade.quantity, 4)}
                         </td>
                         <td className="py-4 px-6 text-right text-sm text-gray-600">
-                          --
+                          {formatHoldingTime(trade.holding_duration)}
                         </td>
                         <td className="py-4 px-6 text-right font-mono text-sm text-gray-900">
-                          ${formatNumber(notional, 2)}
+                          ${formatNumber(trade.notional_entry || trade.total_value, 2)}
                         </td>
                         <td className="py-4 px-6 text-right font-mono text-sm text-gray-900">
-                          ${formatNumber(notional, 2)}
+                          ${formatNumber(trade.notional_exit || trade.total_value, 2)}
                         </td>
                         <td className="py-4 px-6 text-right font-mono text-sm text-gray-600">
-                          $0.00
+                          ${formatNumber(trade.total_fees || trade.fee || 0, 2)}
                         </td>
-                        <td className="py-4 px-6 text-right font-bold text-sm text-gray-600">
-                          $0.00
+                        <td className={`py-4 px-6 text-right font-bold text-sm ${
+                          pnl >= 0 ? 'text-green-600' : 'text-red-600'
+                        }`}>
+                          {pnl >= 0 ? '+' : ''}${formatNumber(pnl, 2)}
                         </td>
                       </tr>
                     );

@@ -11,6 +11,10 @@ export interface TradingSession {
   initial_capital: number | null;
   created_at: string;
   config?: Record<string, any>;
+  // Agent 状态
+  agent_started?: boolean;
+  agent_error?: string;
+  agent_status?: Record<string, any>;
 }
 
 interface SessionState {
@@ -28,7 +32,16 @@ interface SessionState {
   
   // Actions
   fetchActiveSession: () => Promise<void>;
-  startSession: (sessionName?: string, initialCapital?: number, config?: Record<string, any>) => Promise<TradingSession>;
+  startSession: (
+    sessionName?: string,
+    initialCapital?: number,
+    agentConfig?: {
+      auto_start_agent?: boolean;
+      symbols?: string[];
+      decision_interval?: number;
+      risk_params?: Record<string, any>;
+    }
+  ) => Promise<TradingSession>;
   endSession: (sessionId?: number, status?: string, notes?: string) => Promise<void>;
   fetchSessionList: (status?: string, limit?: number) => Promise<void>;
   clearError: () => void;
@@ -68,7 +81,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
-  startSession: async (sessionName?: string, initialCapital?: number, config?: Record<string, any>) => {
+  startSession: async (
+    sessionName?: string,
+    initialCapital?: number,
+    agentConfig?: {
+      auto_start_agent?: boolean;
+      symbols?: string[];
+      decision_interval?: number;
+      risk_params?: Record<string, any>;
+    }
+  ) => {
     set({ isLoading: true, error: null });
     try {
       const response = await fetch(`${API_BASE_URL}/session/start`, {
@@ -79,29 +101,33 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         body: JSON.stringify({
           session_name: sessionName,
           initial_capital: initialCapital,
-          config: config,
+          // Agent 配置参数
+          auto_start_agent: agentConfig?.auto_start_agent ?? true,
+          symbols: agentConfig?.symbols,
+          decision_interval: agentConfig?.decision_interval,
+          risk_params: agentConfig?.risk_params,
         }),
       });
-      
+
       const result = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(result.detail || '开始会话失败');
       }
-      
+
       const newSession: TradingSession = result.data;
-      
-      set({ 
+
+      set({
         activeSession: newSession,
-        isLoading: false 
+        isLoading: false
       });
-      
+
       return newSession;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '未知错误';
-      set({ 
+      set({
         error: errorMessage,
-        isLoading: false 
+        isLoading: false
       });
       throw error;
     }

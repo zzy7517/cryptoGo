@@ -24,6 +24,12 @@ class StartSessionRequest(BaseModel):
     initial_capital: Optional[float] = Field(None, description="初始资金", gt=0)
     config: Optional[Dict[str, Any]] = Field(None, description="配置信息")
 
+    # Agent 配置（可选）
+    auto_start_agent: bool = Field(default=True, description="是否自动启动 Agent")
+    symbols: Optional[List[str]] = Field(None, description="交易币种列表，例如 ['BTC/USDT:USDT', 'ETH/USDT:USDT']")
+    decision_interval: Optional[int] = Field(60, description="决策间隔（秒），默认 60 秒", ge=10, le=3600)
+    risk_params: Optional[Dict[str, Any]] = Field(None, description="风险参数配置")
+
 
 class EndSessionRequest(BaseModel):
     """结束会话请求"""
