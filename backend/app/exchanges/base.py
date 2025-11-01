@@ -1,11 +1,10 @@
 """
-抽象交易类
-定义交易接口，所有交易所实现都需要继承这个类
-创建时间: 2025-10-31
+抽象交易所基类
+定义所有交易所的通用接口，包括账户管理、交易执行、持仓查询等
+创建时间: 2025-11-01
 """
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List
-from decimal import Decimal
 from enum import Enum
 
 from app.utils.logging import get_logger
@@ -91,31 +90,37 @@ class OrderResult:
         }
 
 
-class AbstractTrader(ABC):
+class AbstractExchange(ABC):
     """
-    抽象交易类
+    抽象交易所基类
     
     定义所有交易所都需要实现的接口，包括：
-    - 开仓/平仓
-    - 市价/限价单
-    - 止损/止盈设置
+    - 账户信息管理
     - 持仓查询
-    - 账户信息查询
+    - 订单执行
+    - 杠杆设置
+    - 止损/止盈
     """
     
-    def __init__(self, api_key: str, api_secret: str):
+    def __init__(self, api_key: str, api_secret: str, testnet: bool = False):
         """
-        初始化交易器
+        初始化交易所
         
         Args:
             api_key: API密钥
             api_secret: API密钥
+            testnet: 是否使用测试网
         """
         self.api_key = api_key
         self.api_secret = api_secret
-        self.exchange = None
+        self.testnet = testnet
         
-        logger.info(f"初始化交易器: {self.__class__.__name__}")
+        logger.info(
+            f"初始化交易所: {self.__class__.__name__}",
+            testnet=testnet
+        )
+    
+    # ==================== 初始化 ====================
     
     @abstractmethod
     def initialize(self) -> bool:
@@ -126,6 +131,74 @@ class AbstractTrader(ABC):
             是否初始化成功
         """
         pass
+    
+    @abstractmethod
+    def test_connection(self) -> bool:
+        """
+        测试连接
+        
+        Returns:
+            是否连接成功
+        """
+        pass
+    
+    # ==================== 账户相关 ====================
+    
+    @abstractmethod
+    def get_account_info(self) -> Dict[str, Any]:
+        """
+        获取账户信息
+        
+        Returns:
+            账户信息字典，包含余额、权限等
+        """
+        pass
+    
+    @abstractmethod
+    def get_balance(self, currency: str = 'USDT') -> Dict[str, Any]:
+        """
+        获取账户余额
+        
+        Args:
+            currency: 币种
+            
+        Returns:
+            余额信息
+        """
+        pass
+    
+    @abstractmethod
+    def get_positions(self, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        获取持仓信息
+        
+        Args:
+            symbol: 交易对（可选）
+            
+        Returns:
+            持仓列表
+        """
+        pass
+    
+    @abstractmethod
+    def get_position(
+        self,
+        symbol: str,
+        position_side: Optional[PositionSide] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        获取单个持仓信息
+        
+        Args:
+            symbol: 交易对
+            position_side: 持仓方向（None表示获取所有）
+            
+        Returns:
+            持仓信息字典
+        """
+        pass
+    
+    # ==================== 交易相关 ====================
     
     @abstractmethod
     def create_market_order(
@@ -140,7 +213,7 @@ class AbstractTrader(ABC):
         创建市价单
         
         Args:
-            symbol: 交易对，如 'BTC/USDT:USDT'
+            symbol: 交易对
             side: 订单方向（buy/sell）
             quantity: 数量
             position_side: 持仓方向（long/short），合约专用
@@ -176,6 +249,44 @@ class AbstractTrader(ABC):
             订单结果
         """
         pass
+    
+    @abstractmethod
+    def cancel_order(
+        self,
+        symbol: str,
+        order_id: str
+    ) -> bool:
+        """
+        取消订单
+        
+        Args:
+            symbol: 交易对
+            order_id: 订单ID
+            
+        Returns:
+            是否取消成功
+        """
+        pass
+    
+    @abstractmethod
+    def get_order_status(
+        self,
+        symbol: str,
+        order_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        查询订单状态
+        
+        Args:
+            symbol: 交易对
+            order_id: 订单ID
+            
+        Returns:
+            订单信息
+        """
+        pass
+    
+    # ==================== 杠杆和止损止盈 ====================
     
     @abstractmethod
     def set_leverage(
@@ -259,82 +370,7 @@ class AbstractTrader(ABC):
         """
         pass
     
-    @abstractmethod
-    def get_position(
-        self,
-        symbol: str,
-        position_side: Optional[PositionSide] = None
-    ) -> Optional[Dict[str, Any]]:
-        """
-        获取持仓信息
-        
-        Args:
-            symbol: 交易对
-            position_side: 持仓方向（None表示获取所有）
-            
-        Returns:
-            持仓信息字典
-        """
-        pass
-    
-    @abstractmethod
-    def get_all_positions(self) -> List[Dict[str, Any]]:
-        """
-        获取所有持仓
-        
-        Returns:
-            持仓列表
-        """
-        pass
-    
-    @abstractmethod
-    def get_balance(self, currency: str = 'USDT') -> Dict[str, Any]:
-        """
-        获取账户余额
-        
-        Args:
-            currency: 币种
-            
-        Returns:
-            余额信息
-        """
-        pass
-    
-    @abstractmethod
-    def cancel_order(
-        self,
-        symbol: str,
-        order_id: str
-    ) -> bool:
-        """
-        取消订单
-        
-        Args:
-            symbol: 交易对
-            order_id: 订单ID
-            
-        Returns:
-            是否取消成功
-        """
-        pass
-    
-    @abstractmethod
-    def get_order_status(
-        self,
-        symbol: str,
-        order_id: str
-    ) -> Optional[Dict[str, Any]]:
-        """
-        查询订单状态
-        
-        Args:
-            symbol: 交易对
-            order_id: 订单ID
-            
-        Returns:
-            订单信息
-        """
-        pass
+    # ==================== 便捷方法 ====================
     
     def open_long(
         self,
@@ -499,3 +535,4 @@ class AbstractTrader(ABC):
             position_side=PositionSide.SHORT,
             quantity=quantity
         )
+

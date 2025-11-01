@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     EXCHANGE: str = "binance"
     BINANCE_API_KEY: Optional[str] = None
     BINANCE_SECRET: Optional[str] = None
+    BINANCE_TESTNET: bool = True  # 是否使用测试网（Demo Trading）
     
     # 代理配置
     HTTP_PROXY: Optional[str] = "http://127.0.0.1:7897"

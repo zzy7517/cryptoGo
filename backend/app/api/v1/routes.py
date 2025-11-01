@@ -1,9 +1,10 @@
 """
 集中式路由定义
 创建时间: 2025-10-29
+更新时间: 2025-11-01（使用通用 account_handlers）
 """
 from fastapi import APIRouter
-from app.api.v1 import session_handlers, agent_handlers, market_handlers, binance_account_handlers
+from app.api.v1 import session_handlers, agent_handlers, market_handlers, account_handlers
 
 # 创建 v1 API 路由器
 api_v1_router = APIRouter(prefix="/api/v1")
@@ -179,32 +180,32 @@ market_router.add_api_route(
 
 
 # ============================================
-# Binance Account 路由
+# Account 路由（通用，自动根据配置使用对应交易所）
 # ============================================
-binance_account_router = APIRouter(prefix="/binance", tags=["binance"])
+account_router = APIRouter(prefix="/account", tags=["account"])
 
-# GET /api/v1/binance/account - 获取币安账户信息
-binance_account_router.add_api_route(
-    "/account",
-    binance_account_handlers.get_binance_account_info,
+# GET /api/v1/account/info - 获取账户信息
+account_router.add_api_route(
+    "/info",
+    account_handlers.get_account_info,
     methods=["GET"],
-    summary="获取币安账户信息"
+    summary="获取账户信息（自动根据配置使用对应交易所）"
 )
 
-# GET /api/v1/binance/positions - 获取币安持仓信息
-binance_account_router.add_api_route(
+# GET /api/v1/account/positions - 获取持仓信息
+account_router.add_api_route(
     "/positions",
-    binance_account_handlers.get_binance_positions,
+    account_handlers.get_positions,
     methods=["GET"],
-    summary="获取币安持仓信息"
+    summary="获取持仓信息（自动根据配置使用对应交易所）"
 )
 
-# GET /api/v1/binance/summary - 获取币安账户摘要
-binance_account_router.add_api_route(
+# GET /api/v1/account/summary - 获取账户摘要
+account_router.add_api_route(
     "/summary",
-    binance_account_handlers.get_binance_account_summary,
+    account_handlers.get_account_summary,
     methods=["GET"],
-    summary="获取币安账户摘要（账户+持仓）"
+    summary="获取账户摘要（账户+持仓，自动根据配置使用对应交易所）"
 )
 
 
@@ -214,5 +215,5 @@ binance_account_router.add_api_route(
 api_v1_router.include_router(session_router)
 api_v1_router.include_router(agent_router)
 api_v1_router.include_router(market_router)
-api_v1_router.include_router(binance_account_router)
+api_v1_router.include_router(account_router)
 

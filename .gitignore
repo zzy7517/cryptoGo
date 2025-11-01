@@ -18,3 +18,5 @@ htmlcov/
 *.egg-info/
 *.zip
 *.log
+
+.cursor/

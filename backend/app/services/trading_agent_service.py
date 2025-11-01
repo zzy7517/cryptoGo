@@ -16,8 +16,8 @@ from pathlib import Path
 from app.services.data_collector import get_exchange_connector
 from app.services.ai_engine import get_ai_engine
 from app.services.prompt_builder import build_advanced_prompt
-from app.services.binance_trader import create_binance_trader_from_config, BinanceTrader
-from app.services.abstract_trader import PositionSide as TraderPositionSide
+from app.services.trader_service import get_trader
+from app.exchanges.base import PositionSide as TraderPositionSide
 from app.services.response_parser import ResponseParser, Decision as ParsedDecision
 from app.repositories.position_repo import PositionRepository
 from app.repositories.trade_repo import TradeRepository
@@ -121,8 +121,8 @@ async def build_system_prompt(risk_params: Dict[str, Any], session_id: int) -> s
         template = f.read()
     
     # 获取账户净值
-    from app.services.binance_account_service import BinanceAccountService
-    account_service = BinanceAccountService()
+    from app.services.account_service import get_account_service
+    account_service = get_account_service()
     account_info = account_service.get_account_info()
     account_equity = account_info.get('totalMarginBalance', 10000)  # 默认10000
     
@@ -275,8 +275,8 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
             position_repo = PositionRepository(db)
             trade_repo = TradeRepository(db)
             
-            # 创建币安交易器
-            trader = create_binance_trader_from_config()
+            # 创建交易器（自动从配置读取交易所类型）
+            trader = get_trader()
             
             # 根据不同的 action 执行不同的操作
             if decision.action == "open_long":
