@@ -8,8 +8,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from typing import Generator
 
-from app.utils.config import settings
-from app.utils.logging import get_logger
+from .config import settings
+from .logging import get_logger
 
 logger = get_logger(__name__)
 

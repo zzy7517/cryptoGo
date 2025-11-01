@@ -5,10 +5,10 @@
 创建时间: 2025-11-01
 """
 from typing import Dict, Any, Optional
-from app.exchanges.base import AbstractExchange
-from app.exchanges.binance import BinanceExchange
-from app.utils.logging import get_logger
-from app.utils.config import settings
+from .base import AbstractExchange
+from .binance import BinanceExchange
+from ..utils.logging import get_logger
+from ..utils.config import settings
 
 logger = get_logger(__name__)
 

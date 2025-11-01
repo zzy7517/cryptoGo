@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List
 from enum import Enum
 
-from app.utils.logging import get_logger
+from ..utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -132,16 +132,6 @@ class AbstractExchange(ABC):
         """
         pass
     
-    @abstractmethod
-    def test_connection(self) -> bool:
-        """
-        测试连接
-        
-        Returns:
-            是否连接成功
-        """
-        pass
-    
     # ==================== 账户相关 ====================
     
     @abstractmethod
@@ -225,32 +215,6 @@ class AbstractExchange(ABC):
         pass
     
     @abstractmethod
-    def create_limit_order(
-        self,
-        symbol: str,
-        side: OrderSide,
-        quantity: float,
-        price: float,
-        position_side: Optional[PositionSide] = None,
-        reduce_only: bool = False
-    ) -> OrderResult:
-        """
-        创建限价单
-        
-        Args:
-            symbol: 交易对
-            side: 订单方向
-            quantity: 数量
-            price: 限价
-            position_side: 持仓方向
-            reduce_only: 是否只减仓
-            
-        Returns:
-            订单结果
-        """
-        pass
-    
-    @abstractmethod
     def cancel_order(
         self,
         symbol: str,
@@ -267,25 +231,7 @@ class AbstractExchange(ABC):
             是否取消成功
         """
         pass
-    
-    @abstractmethod
-    def get_order_status(
-        self,
-        symbol: str,
-        order_id: str
-    ) -> Optional[Dict[str, Any]]:
-        """
-        查询订单状态
-        
-        Args:
-            symbol: 交易对
-            order_id: 订单ID
-            
-        Returns:
-            订单信息
-        """
-        pass
-    
+
     # ==================== 杠杆和止损止盈 ====================
     
     @abstractmethod
@@ -535,4 +481,95 @@ class AbstractExchange(ABC):
             position_side=PositionSide.SHORT,
             quantity=quantity
         )
+    
+    # ==================== 市场数据相关 ====================
+    
+    @abstractmethod
+    def get_ticker(self, symbol: str) -> Dict[str, Any]:
+        """
+        获取实时行情数据
+        
+        Args:
+            symbol: 交易对
+            
+        Returns:
+            行情数据字典
+        """
+        pass
+    
+    @abstractmethod
+    def get_klines(
+        self,
+        symbol: str,
+        interval: str = '1h',
+        limit: int = 100,
+        since: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        获取K线数据
+        
+        Args:
+            symbol: 交易对
+            interval: 时间周期
+            limit: 返回数据条数
+            since: 起始时间戳（毫秒）
+            
+        Returns:
+            K线数据列表
+        """
+        pass
+    
+    @abstractmethod
+    def get_order_book(self, symbol: str, limit: int = 5) -> Dict[str, Any]:
+        """
+        获取订单簿数据
+        
+        Args:
+            symbol: 交易对
+            limit: 深度级别
+            
+        Returns:
+            订单簿数据
+        """
+        pass
+    
+    @abstractmethod
+    def get_symbols(self, quote: str = 'USDT', active_only: bool = True) -> List[Dict[str, Any]]:
+        """
+        获取交易对列表
+        
+        Args:
+            quote: 计价货币
+            active_only: 是否只返回活跃的交易对
+            
+        Returns:
+            交易对列表
+        """
+        pass
+    
+    @abstractmethod
+    def get_funding_rate(self, symbol: str) -> Dict[str, Any]:
+        """
+        获取资金费率（合约市场）
+        
+        Args:
+            symbol: 交易对
+            
+        Returns:
+            资金费率数据
+        """
+        pass
+    
+    @abstractmethod
+    def get_open_interest(self, symbol: str) -> Dict[str, Any]:
+        """
+        获取持仓量（合约市场）
+        
+        Args:
+            symbol: 交易对
+            
+        Returns:
+            持仓量数据
+        """
+        pass
 

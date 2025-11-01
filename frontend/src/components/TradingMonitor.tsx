@@ -7,7 +7,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { sessionApi, agentApi, binanceApi } from '@/lib/api';
+import { sessionApi, agentApi, accountApi } from '@/lib/api';
 import AgentMonitor from './AgentMonitor';
 import ChatPanel from './ChatPanel';
 
@@ -23,15 +23,15 @@ export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
     refetchInterval: 10000, // 每10秒刷新
   });
 
-  // 获取币安账户信息
-  const { data: binanceAccount } = useQuery({
-    queryKey: ['binanceAccount'],
-    queryFn: () => binanceApi.getAccountSummary(),
+  // 获取账户信息
+  const { data: accountData } = useQuery({
+    queryKey: ['accountSummary'],
+    queryFn: () => accountApi.getAccountSummary(),
     refetchInterval: 15000, // 每15秒刷新
   });
 
   const details = sessionDetails?.data;
-  const binanceData = binanceAccount?.data;
+  const exchangeData = accountData?.data;
 
   const formatNumber = (num: number | null | undefined, decimals: number = 2): string => {
     if (num === null || num === undefined) return '--';
@@ -124,34 +124,34 @@ export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
             </div>
 
             {/* 币安账户信息 */}
-            {binanceData?.account && (
+            {exchangeData?.account && (
               <div className="space-y-3">
                 <div className="text-xs font-semibold text-gray-600 mb-2">币安账户 (Demo)</div>
                 <div>
                   <div className="text-xs text-gray-500 mb-1">总余额</div>
                   <div className="text-lg font-bold text-blue-600">
-                    ${formatNumber(binanceData.account.totalWalletBalance, 2)}
+                    ${formatNumber(exchangeData.account.totalWalletBalance, 2)}
                   </div>
                 </div>
                 <div>
                   <div className="text-xs text-gray-500 mb-1">可用余额</div>
                   <div className="text-base font-semibold text-gray-700">
-                    ${formatNumber(binanceData.account.availableBalance, 2)}
+                    ${formatNumber(exchangeData.account.availableBalance, 2)}
                   </div>
                 </div>
                 <div>
                   <div className="text-xs text-gray-500 mb-1">未实现盈亏</div>
                   <div className={`text-base font-bold ${
-                    (binanceData.account.totalUnrealizedProfit || 0) >= 0 ? 'text-green-500' : 'text-red-500'
+                    (exchangeData.account.totalUnrealizedProfit || 0) >= 0 ? 'text-green-500' : 'text-red-500'
                   }`}>
-                    {(binanceData.account.totalUnrealizedProfit || 0) >= 0 ? '+' : ''}
-                    ${formatNumber(binanceData.account.totalUnrealizedProfit, 2)}
+                    {(exchangeData.account.totalUnrealizedProfit || 0) >= 0 ? '+' : ''}
+                    ${formatNumber(exchangeData.account.totalUnrealizedProfit, 2)}
                   </div>
                 </div>
                 <div>
                   <div className="text-xs text-gray-500 mb-1">持仓数量</div>
                   <div className="text-base font-semibold text-gray-700">
-                    {binanceData.positionsCount || 0}
+                    {exchangeData.positionsCount || 0}
                   </div>
                 </div>
               </div>
@@ -160,7 +160,7 @@ export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
         </div>
 
         {/* 币安实时持仓 */}
-        {binanceData?.positions && binanceData.positions.length > 0 && (
+        {exchangeData?.positions && exchangeData.positions.length > 0 && (
           <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
             <h3 className="text-lg font-semibold text-gray-800 mb-4">
               币安实时持仓 <span className="text-sm font-normal text-gray-500">(Demo Trading)</span>
@@ -180,7 +180,7 @@ export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {binanceData.positions.map((position: any, index: number) => {
+                  {exchangeData.positions.map((position: any, index: number) => {
                     const pnl = position.unrealizedProfit || 0;
                     const pnlPct = position.unrealizedProfitPct || 0;
                     return (

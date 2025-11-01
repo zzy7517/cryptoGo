@@ -15,7 +15,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field, asdict
 from decimal import Decimal
 
-from app.utils.logging import get_logger
+from ..utils.logging import get_logger
 
 logger = get_logger(__name__)
 

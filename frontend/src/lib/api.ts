@@ -281,32 +281,31 @@ export const sessionApi = {
 };
 
 /**
- * Binance Account API
- * 币安账户信息 API
+ * Account API (通用账户API，支持多交易所)
  * 创建时间: 2025-10-31
  */
-export const binanceApi = {
+export const accountApi = {
   /**
-   * 获取币安账户信息
+   * 获取账户信息（自动根据配置使用对应交易所）
    */
   getAccountInfo: async (): Promise<any> => {
-    const response = await apiClient.get('/api/v1/binance/account');
+    const response = await apiClient.get('/api/v1/account/info');
     return response.data;
   },
 
   /**
-   * 获取币安持仓信息
+   * 获取持仓信息（自动根据配置使用对应交易所）
    */
   getPositions: async (): Promise<any> => {
-    const response = await apiClient.get('/api/v1/binance/positions');
+    const response = await apiClient.get('/api/v1/account/positions');
     return response.data;
   },
 
   /**
-   * 获取币安账户摘要（账户+持仓）
+   * 获取账户摘要（账户+持仓，自动根据配置使用对应交易所）
    */
   getAccountSummary: async (): Promise<any> => {
-    const response = await apiClient.get('/api/v1/binance/summary');
+    const response = await apiClient.get('/api/v1/account/summary');
     return response.data;
   },
 };

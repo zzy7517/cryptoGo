@@ -30,14 +30,27 @@ export default function ChatPanel({ sessionId }: ChatPanelProps) {
   const [decisions, setDecisions] = useState<AIDecision[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [isUserScrolling, setIsUserScrolling] = useState(false);
+  const [hasNewMessages, setHasNewMessages] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const previousDecisionsLengthRef = useRef(0);
 
   // 获取AI决策记录
   const fetchDecisions = async () => {
     try {
       const response = await sessionApi.getAIDecisions(sessionId);
       if (response.success) {
-        setDecisions(response.data.reverse()); // 反转顺序，最新的在底部
+        const newDecisions = response.data.reverse(); // 反转顺序，最新的在底部
+        const hasNew = newDecisions.length > previousDecisionsLengthRef.current;
+        
+        setDecisions(newDecisions);
+        previousDecisionsLengthRef.current = newDecisions.length;
+        
+        // 如果有新消息且用户正在浏览历史，显示新消息提示
+        if (hasNew && isUserScrolling) {
+          setHasNewMessages(true);
+        }
       }
       setLoading(false);
     } catch (error) {
@@ -53,10 +66,42 @@ export default function ChatPanel({ sessionId }: ChatPanelProps) {
     return () => clearInterval(interval);
   }, [sessionId]);
 
-  // 自动滚动到底部
+  // 检测用户是否在底部
+  const checkIfAtBottom = () => {
+    if (!chatContainerRef.current) return true;
+    const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+    // 允许50px的误差范围
+    return scrollHeight - scrollTop - clientHeight < 50;
+  };
+
+  // 滚动事件处理
+  const handleScroll = () => {
+    const isAtBottom = checkIfAtBottom();
+    setIsUserScrolling(!isAtBottom);
+    if (isAtBottom) {
+      setHasNewMessages(false);
+    }
+  };
+
+  // 智能自动滚动：只在有新消息且用户在底部时滚动
   useEffect(() => {
+    const hasNewMessage = decisions.length > previousDecisionsLengthRef.current;
+    
+    if (hasNewMessage || decisions.length === previousDecisionsLengthRef.current) {
+      // 首次加载或有新消息时
+      if (!isUserScrolling) {
+        // 用户在底部，平滑滚动到底部
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+  }, [decisions, isUserScrolling]);
+
+  // 手动滚动到底部
+  const scrollToBottom = () => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [decisions]);
+    setHasNewMessages(false);
+    setIsUserScrolling(false);
+  };
 
   const toggleExpand = (id: number) => {
     const newSet = new Set(expandedIds);
@@ -135,7 +180,11 @@ export default function ChatPanel({ sessionId }: ChatPanelProps) {
       </div>
 
       {/* 消息列表 */}
-      <div className="flex-1 overflow-y-auto px-4 py-5 space-y-6 custom-scrollbar">
+      <div 
+        ref={chatContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-4 py-5 space-y-6 custom-scrollbar relative"
+      >
         {decisions.map((decision) => {
           const isExpanded = expandedIds.has(decision.id);
 
@@ -277,6 +326,21 @@ export default function ChatPanel({ sessionId }: ChatPanelProps) {
           );
         })}
         <div ref={chatEndRef} />
+
+        {/* 新消息提示按钮 */}
+        {hasNewMessages && (
+          <div className="fixed bottom-24 left-1/2 transform -translate-x-1/2 z-10">
+            <button
+              onClick={scrollToBottom}
+              className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 transition-all hover:scale-105 animate-bounce"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+              </svg>
+              <span className="text-sm font-medium">有新消息</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

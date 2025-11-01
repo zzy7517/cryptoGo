@@ -4,19 +4,18 @@ Prompt Builder Service - 高级用户提示词构建
 创建时间: 2025-10-31
 """
 
-from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+from typing import Dict, Any, List
+from datetime import datetime
 from pathlib import Path
 import numpy as np
-from decimal import Decimal
 
-from app.services.data_collector import get_exchange_connector
-from app.services.indicators import calculate_indicators, get_indicators_calculator
-from app.repositories.trading_session_repo import TradingSessionRepository
-from app.repositories.position_repo import PositionRepository
-from app.repositories.trade_repo import TradeRepository
-from app.utils.database import get_db
-from app.utils.logging import get_logger
+from ..utils.data_collector import get_exchange
+from ..utils.indicators import get_indicators_calculator
+from ..repositories.trading_session_repo import TradingSessionRepository
+from ..repositories.position_repo import PositionRepository
+from ..repositories.trade_repo import TradeRepository
+from ..utils.database import get_db
+from ..utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -26,7 +25,7 @@ class PromptDataCollector:
     
     def __init__(self, session_id: int):
         self.session_id = session_id
-        self.exchange = get_exchange_connector()  # 交易所连接器实例
+        self.exchange = get_exchange()  # 交易所实例
     
     async def collect_coin_data(self, symbol: str) -> Dict[str, Any]:
         """
@@ -368,7 +367,7 @@ class PromptDataCollector:
             db.close()
 
 
-class AdvancedPromptBuilder:
+class PromptBuilder:
     """高级Prompt构建器 - 详细市场数据和技术分析"""
     
     def __init__(self, session_id: int):
@@ -393,8 +392,6 @@ class AdvancedPromptBuilder:
         Returns:
             格式化的提示词
         """
-        logger.info("🔨 开始构建高级提示词")
-        
         try:
             # 加载模板
             with open(self.template_path, 'r', encoding='utf-8') as f:
@@ -560,7 +557,7 @@ class AdvancedPromptBuilder:
 
 
 # 便捷函数
-async def build_advanced_prompt(
+async def build_user_prompt(
     session_id: int,
     symbols: List[str],
     call_count: int,
@@ -578,6 +575,6 @@ async def build_advanced_prompt(
     Returns:
         格式化的提示词
     """
-    builder = AdvancedPromptBuilder(session_id)
+    builder = PromptBuilder(session_id)
     return await builder.build_prompt(symbols, call_count, start_time)
 

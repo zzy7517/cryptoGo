@@ -6,7 +6,7 @@
 from fastapi import HTTPException, Query
 from typing import Optional
 
-from app.schemas.market import (
+from ...schemas.market import (
     KlineResponse, 
     KlineData, 
     TickerData, 
@@ -16,10 +16,10 @@ from app.schemas.market import (
     OpenInterestData,
     IndicatorsResponse
 )
-from app.services.data_collector import get_exchange_connector
-from app.services.indicators import get_indicators_calculator
-from app.utils.config import settings
-from app.utils.logging import get_logger
+from ...utils.data_collector import get_exchange
+from ...utils.indicators import get_indicators_calculator
+from ...utils.config import settings
+from ...utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -42,8 +42,8 @@ async def get_klines(
     - 1d: 1天
     """
     try:
-        connector = get_exchange_connector()
-        klines_data = connector.get_klines(symbol, interval, limit, since)
+        exchange = get_exchange()
+        klines_data = exchange.get_klines(symbol, interval, limit, since)
         
         return KlineResponse(
             symbol=symbol,
@@ -65,8 +65,8 @@ async def get_ticker(
     返回指定交易对的实时价格、买卖价、24h涨跌幅等信息
     """
     try:
-        connector = get_exchange_connector()
-        ticker_data = connector.get_ticker(symbol)
+        exchange = get_exchange()
+        ticker_data = exchange.get_ticker(symbol)
         
         return TickerData(**ticker_data)
     except Exception as e:
@@ -84,8 +84,8 @@ async def get_symbols(
     返回指定计价货币的所有交易对
     """
     try:
-        connector = get_exchange_connector()
-        symbols_data = connector.get_symbols(quote=quote, active_only=active_only)
+        exchange = get_exchange()
+        symbols_data = exchange.get_symbols(quote=quote, active_only=active_only)
         
         return SymbolListResponse(
             symbols=[SymbolInfo(**symbol) for symbol in symbols_data],
@@ -105,8 +105,8 @@ async def get_funding_rate(
     返回当前资金费率和下次结算时间
     """
     try:
-        connector = get_exchange_connector()
-        funding_data = connector.get_funding_rate(symbol)
+        exchange = get_exchange()
+        funding_data = exchange.get_funding_rate(symbol)
         
         return FundingRateData(**funding_data)
     except Exception as e:
@@ -123,8 +123,8 @@ async def get_open_interest(
     返回当前持仓量
     """
     try:
-        connector = get_exchange_connector()
-        oi_data = connector.get_open_interest(symbol)
+        exchange = get_exchange()
+        oi_data = exchange.get_open_interest(symbol)
         
         return OpenInterestData(**oi_data)
     except Exception as e:
@@ -151,8 +151,8 @@ async def get_indicators(
     """
     try:
         # 获取K线数据
-        connector = get_exchange_connector()
-        klines_data = connector.get_klines(
+        exchange = get_exchange()
+        klines_data = exchange.get_klines(
             symbol=symbol,
             interval=interval,
             limit=limit

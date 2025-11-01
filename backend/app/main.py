@@ -10,32 +10,25 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.utils.config import settings
-from app.utils.logging import setup_logging
-from app.utils.exceptions import (
+from .utils.config import settings
+from .utils.logging import setup_logging
+from .utils.exceptions import (
     CryptoGoException,
     UnsupportedFeatureException, 
     DataFetchException,
     RateLimitException,
     ValidationException
 )
-from app.api.v1.routes import api_v1_router
+from .api.v1.routes import api_v1_router
 
 # 初始化 Loguru 日志系统
 logger = setup_logging()
 
 
-# ============================================
-# 应用生命周期管理（替代 startup/shutdown）
-# ============================================
-
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     应用生命周期管理
-    
-    这个函数替代了旧的 @app.on_event("startup") 和 @app.on_event("shutdown")
-    提供更可靠的资源管理和优雅关闭
     """
     # ============ 启动阶段 ============
     logger.info("=" * 80)
@@ -47,7 +40,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     
     # 初始化数据库
     try:
-        from app.utils.database import init_db
+        from .utils.database import init_db
         init_db()
         logger.info("✅ 数据库初始化成功")
     except Exception as e:
@@ -55,14 +48,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     
     # 测试交易所连接
     try:
-        from app.services.data_collector import get_exchange_connector
-        connector = get_exchange_connector()
-        logger.info(f"✅ 交易所 {connector.exchange_id} 连接成功")
+        from .utils.data_collector import get_exchange
+        _ = get_exchange()
+        logger.info(f"✅ 交易所 {settings.EXCHANGE} 连接成功")
     except Exception as e:
         logger.error(f"❌ 交易所连接失败: {str(e)}")
     
     # 初始化后台 Agent 管理器
-    from app.services.trading_agent_service import get_background_agent_manager
+    from .services.trading_agent_service import get_background_agent_manager
     manager = get_background_agent_manager()
     logger.info("✅ 后台 Agent 管理器已初始化")
     logger.info("=" * 80)
@@ -77,8 +70,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     
     # 优雅关闭所有后台 Agent
     try:
-        from app.services.trading_session_service import TradingSessionService
-        from app.utils.database import get_db
+        from .services.trading_session_service import TradingSessionService
+        from .utils.database import get_db
         
         logger.info("🛑 开始停止所有后台 Agent...")
         running_agents = manager.list_agents()
@@ -139,7 +132,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.VERSION,
-    description="基于大语言模型的智能加密货币交易系统",
+    description="自动合约交易",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan  # 使用新的 lifespan 管理器

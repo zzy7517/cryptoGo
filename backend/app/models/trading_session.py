@@ -8,7 +8,7 @@ from sqlalchemy import Column, BigInteger, String, Numeric, Integer, Boolean, Te
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 
-from app.utils.database import Base
+from ..utils.database import Base
 
 
 class TradingSession(Base):

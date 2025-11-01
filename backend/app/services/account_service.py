@@ -5,9 +5,9 @@
 创建时间: 2025-11-01
 """
 from typing import Dict, Any, List
-from app.exchanges.base import AbstractExchange
-from app.exchanges.factory import create_default_exchange
-from app.utils.logging import get_logger
+from ..exchanges.base import AbstractExchange
+from ..exchanges.factory import create_default_exchange
+from ..utils.logging import get_logger
 
 logger = get_logger(__name__)
 

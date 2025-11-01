@@ -9,18 +9,21 @@ from sqlalchemy import desc
 from decimal import Decimal
 from datetime import datetime
 
-from app.models.trade import Trade
-from app.repositories.base import BaseRepository
-from app.utils.logging import get_logger
+from ..models.trade import Trade
+from ..utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-class TradeRepository(BaseRepository[Trade]):
+class TradeRepository:
     """交易记录数据访问层"""
     
     def __init__(self, db: Session):
-        super().__init__(Trade, db)
+        self.db = db
+    
+    def get_by_id(self, id: int) -> Optional[Trade]:
+        """根据 ID 获取交易记录"""
+        return self.db.query(Trade).filter(Trade.id == id).first()
     
     def create_trade(
         self,
@@ -60,7 +63,7 @@ class TradeRepository(BaseRepository[Trade]):
             创建的 Trade 实例
         """
         try:
-            trade = self.create(
+            trade = Trade(
                 session_id=session_id,
                 symbol=symbol,
                 side=side,
@@ -76,6 +79,9 @@ class TradeRepository(BaseRepository[Trade]):
                 exchange_order_id=exchange_order_id,
                 entry_time=datetime.now()
             )
+            self.db.add(trade)
+            self.db.commit()
+            self.db.refresh(trade)
             
             logger.info(
                 "交易记录已创建",
@@ -98,16 +104,6 @@ class TradeRepository(BaseRepository[Trade]):
         session_id: int,
         limit: int = 100
     ) -> List[Trade]:
-        """
-        获取指定会话的所有交易
-        
-        Args:
-            session_id: 会话 ID
-            limit: 返回数量
-            
-        Returns:
-            交易记录列表
-        """
         return self.db.query(Trade)\
             .filter(Trade.session_id == session_id)\
             .order_by(desc(Trade.created_at))\
@@ -120,17 +116,6 @@ class TradeRepository(BaseRepository[Trade]):
         symbol: str,
         limit: int = 100
     ) -> List[Trade]:
-        """
-        获取指定会话和交易对的交易记录
-        
-        Args:
-            session_id: 会话 ID
-            symbol: 交易对
-            limit: 返回数量
-            
-        Returns:
-            交易记录列表
-        """
         return self.db.query(Trade)\
             .filter(
                 Trade.session_id == session_id,
@@ -145,28 +130,9 @@ class TradeRepository(BaseRepository[Trade]):
         session_id: int,
         limit: int = 100
     ) -> List[Trade]:
-        """
-        获取指定会话的所有交易（别名方法）
-        
-        Args:
-            session_id: 会话 ID
-            limit: 返回数量
-            
-        Returns:
-            交易记录列表
-        """
         return self.get_by_session(session_id, limit)
     
     def get_session_statistics(self, session_id: int) -> dict:
-        """
-        获取会话的交易统计
-        
-        Args:
-            session_id: 会话 ID
-            
-        Returns:
-            统计数据字典
-        """
         trades = self.get_by_session(session_id, limit=10000)
         
         total_trades = len(trades)

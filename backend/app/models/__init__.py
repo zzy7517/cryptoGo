@@ -1,10 +1,10 @@
 """
 数据库模型
 """
-from app.models.trading_session import TradingSession
-from app.models.position import Position
-from app.models.ai_decision import AIDecision
-from app.models.trade import Trade
+from .trading_session import TradingSession
+from .position import Position
+from .ai_decision import AIDecision
+from .trade import Trade
 
 __all__ = [
     "TradingSession",

@@ -5,16 +5,17 @@
 """
 from typing import Dict, Any, Optional, List
 
-from app.exchanges.base import (
+from ..base import (
     AbstractExchange,
     OrderSide,
     OrderType,
     PositionSide,
     OrderResult
 )
-from app.exchanges.binance.client import BinanceFuturesClient
-from app.utils.logging import get_logger
-from app.utils.exceptions import ConfigurationException
+from .client import BinanceFuturesClient
+from .market_data import BinanceMarketData
+from ...utils.logging import get_logger
+from ...utils.exceptions import ConfigurationException
 
 logger = get_logger(__name__)
 
@@ -46,6 +47,7 @@ class BinanceExchange(AbstractExchange):
         super().__init__(api_key, api_secret, testnet)
         self.proxies = proxies
         self.client: Optional[BinanceFuturesClient] = None
+        self.market_data: Optional[BinanceMarketData] = None
         self.initialize()
     
     def initialize(self) -> bool:
@@ -56,7 +58,7 @@ class BinanceExchange(AbstractExchange):
             是否初始化成功
         """
         try:
-            # 创建客户端
+            # 创建交易客户端
             self.client = BinanceFuturesClient(
                 api_key=self.api_key,
                 api_secret=self.api_secret,
@@ -64,6 +66,9 @@ class BinanceExchange(AbstractExchange):
                 proxies=self.proxies,
                 timeout=30
             )
+            
+            # 创建市场数据获取器（使用同一个client）
+            self.market_data = BinanceMarketData(client=self.client)
             
             # 测试连接
             server_time = self.client.get_server_time()
@@ -80,19 +85,6 @@ class BinanceExchange(AbstractExchange):
             logger.exception(error_msg)
             raise ConfigurationException(error_msg) from e
     
-    def test_connection(self) -> bool:
-        """
-        测试连接
-        
-        Returns:
-            是否连接成功
-        """
-        try:
-            self.client.ping()
-            return True
-        except Exception as e:
-            logger.error(f"测试连接失败: {e}")
-            return False
     
     # ==================== 账户相关 ====================
     
@@ -596,6 +588,91 @@ class BinanceExchange(AbstractExchange):
         except Exception as e:
             logger.error(f"平仓失败: {e}", symbol=symbol, position_side=position_side)
             return OrderResult(success=False, error=str(e))
+    
+    # ==================== 市场数据相关 ====================
+    
+    def get_ticker(self, symbol: str) -> Dict[str, Any]:
+        """
+        获取实时行情数据
+        
+        Args:
+            symbol: 交易对
+            
+        Returns:
+            行情数据字典
+        """
+        return self.market_data.get_ticker(symbol)
+    
+    def get_klines(
+        self,
+        symbol: str,
+        interval: str = '1h',
+        limit: int = 100,
+        since: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        获取K线数据
+        
+        Args:
+            symbol: 交易对
+            interval: 时间周期
+            limit: 返回数据条数
+            since: 起始时间戳（毫秒）
+            
+        Returns:
+            K线数据列表
+        """
+        return self.market_data.get_klines(symbol, interval, limit, since)
+    
+    def get_order_book(self, symbol: str, limit: int = 5) -> Dict[str, Any]:
+        """
+        获取订单簿数据
+        
+        Args:
+            symbol: 交易对
+            limit: 深度级别
+            
+        Returns:
+            订单簿数据
+        """
+        return self.market_data.get_order_book(symbol, limit)
+    
+    def get_symbols(self, quote: str = 'USDT', active_only: bool = True) -> List[Dict[str, Any]]:
+        """
+        获取交易对列表
+        
+        Args:
+            quote: 计价货币
+            active_only: 是否只返回活跃的交易对
+            
+        Returns:
+            交易对列表
+        """
+        return self.market_data.get_symbols(quote, active_only)
+    
+    def get_funding_rate(self, symbol: str) -> Dict[str, Any]:
+        """
+        获取资金费率（合约市场）
+        
+        Args:
+            symbol: 交易对
+            
+        Returns:
+            资金费率数据
+        """
+        return self.market_data.get_funding_rate(symbol)
+    
+    def get_open_interest(self, symbol: str) -> Dict[str, Any]:
+        """
+        获取持仓量（合约市场）
+        
+        Args:
+            symbol: 交易对
+            
+        Returns:
+            持仓量数据
+        """
+        return self.market_data.get_open_interest(symbol)
     
     def close(self):
         """关闭连接"""

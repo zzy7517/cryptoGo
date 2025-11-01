@@ -4,7 +4,7 @@
 更新时间: 2025-11-01（使用通用 account_handlers）
 """
 from fastapi import APIRouter
-from app.api.v1 import session_handlers, agent_handlers, market_handlers, account_handlers
+from . import session_handlers, agent_handlers, market_handlers, account_handlers
 
 # 创建 v1 API 路由器
 api_v1_router = APIRouter(prefix="/api/v1")

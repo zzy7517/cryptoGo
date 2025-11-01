@@ -26,7 +26,7 @@ export default function Home() {
   const { activeSession, startSession, isLoading: sessionLoading, fetchActiveSession } = useSessionStore();
 
   const [sessionName, setSessionName] = useState('');
-  const [initialCapital, setInitialCapital] = useState('10000');
+  const [initialCapital, setInitialCapital] = useState('5000');
   const [autoStartAgent, setAutoStartAgent] = useState(true);
   const [decisionInterval, setDecisionInterval] = useState('60');
   const [isChecking, setIsChecking] = useState(true);

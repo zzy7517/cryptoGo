@@ -8,18 +8,35 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from decimal import Decimal
 
-from app.models.position import Position
-from app.repositories.base import BaseRepository
-from app.utils.logging import get_logger
+from ..models.position import Position
+from ..utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-class PositionRepository(BaseRepository[Position]):
+class PositionRepository:
     """持仓数据访问层"""
     
     def __init__(self, db: Session):
-        super().__init__(Position, db)
+        self.db = db
+    
+    def get_by_id(self, id: int) -> Optional[Position]:
+        """根据 ID 获取持仓"""
+        return self.db.query(Position).filter(Position.id == id).first()
+    
+    def update(self, id: int, **kwargs) -> Optional[Position]:
+        """更新持仓"""
+        position = self.get_by_id(id)
+        if not position:
+            return None
+        
+        for key, value in kwargs.items():
+            if hasattr(position, key):
+                setattr(position, key, value)
+        
+        self.db.commit()
+        self.db.refresh(position)
+        return position
     
     def create_position(
         self,
@@ -53,7 +70,7 @@ class PositionRepository(BaseRepository[Position]):
             创建的 Position 实例
         """
         try:
-            position = self.create(
+            position = Position(
                 session_id=session_id,
                 symbol=symbol,
                 side=side,
@@ -67,6 +84,9 @@ class PositionRepository(BaseRepository[Position]):
                 entry_order_id=entry_order_id,
                 status="active"
             )
+            self.db.add(position)
+            self.db.commit()
+            self.db.refresh(position)
             
             logger.info(
                 "持仓已创建",
@@ -155,16 +175,6 @@ class PositionRepository(BaseRepository[Position]):
         session_id: int,
         symbol: Optional[str] = None
     ) -> Decimal:
-        """
-        计算指定会话的总盈亏
-        
-        Args:
-            session_id: 会话 ID
-            symbol: 可选，指定交易对
-            
-        Returns:
-            总盈亏
-        """
         query = self.db.query(Position).filter(Position.session_id == session_id)
         
         if symbol:

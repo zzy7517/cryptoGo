@@ -5,8 +5,8 @@
 创建时间: 2025-10-31
 """
 from fastapi import HTTPException
-from app.services.account_service import get_account_service
-from app.utils.logging import get_logger
+from ...services.account_service import get_account_service
+from ...utils.logging import get_logger
 
 logger = get_logger(__name__)
 

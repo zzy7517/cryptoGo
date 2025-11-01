@@ -5,11 +5,11 @@ Agent 处理函数（定时循环版本，无 LangChain）
 """
 from fastapi import HTTPException
 
-from app.schemas.agent import RunAgentRequest, RunAgentResponse
-from app.services.trading_agent_service import run_trading_agent, get_background_agent_manager
-from app.repositories.trading_session_repo import TradingSessionRepository
-from app.utils.database import get_db
-from app.utils.logging import get_logger
+from ...schemas.agent import RunAgentRequest, RunAgentResponse
+from ...services.trading_agent_service import run_trading_agent, get_background_agent_manager
+from ...repositories.trading_session_repo import TradingSessionRepository
+from ...utils.database import get_db
+from ...utils.logging import get_logger
 
 logger = get_logger(__name__)
 

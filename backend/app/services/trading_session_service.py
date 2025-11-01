@@ -6,15 +6,14 @@
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from sqlalchemy.orm import Session
-from decimal import Decimal
 
-from app.repositories.trading_session_repo import TradingSessionRepository
-from app.repositories.position_repo import PositionRepository
-from app.repositories.trade_repo import TradeRepository
-from app.repositories.ai_decision_repo import AIDecisionRepository
-from app.models.trading_session import TradingSession
-from app.utils.logging import get_logger
-from app.utils.exceptions import BusinessException
+from ..repositories.trading_session_repo import TradingSessionRepository
+from ..repositories.position_repo import PositionRepository
+from ..repositories.trade_repo import TradeRepository
+from ..repositories.ai_decision_repo import AIDecisionRepository
+from ..models.trading_session import TradingSession
+from ..utils.logging import get_logger
+from ..utils.exceptions import BusinessException
 
 logger = get_logger(__name__)
 
@@ -45,7 +44,7 @@ class TradingSessionService:
             
         Returns:
             创建的交易会话
-            
+
         Raises:
             BusinessException: 如果已有活跃会话
         """
@@ -156,24 +155,9 @@ class TradingSessionService:
         return updated_session
     
     def get_active_session(self) -> Optional[TradingSession]:
-        """
-        获取当前活跃会话
-        
-        Returns:
-            当前活跃会话或 None
-        """
         return self.session_repo.get_active_session()
     
     def get_session_details(self, session_id: int) -> Dict[str, Any]:
-        """
-        获取会话详细信息
-        
-        Args:
-            session_id: 会话 ID
-            
-        Returns:
-            会话详细信息字典
-        """
         session = self.session_repo.get_by_id(session_id)
         if not session:
             raise BusinessException(
@@ -262,16 +246,6 @@ class TradingSessionService:
         status: Optional[str] = None,
         limit: int = 20
     ) -> List[Dict[str, Any]]:
-        """
-        获取会话列表
-        
-        Args:
-            status: 过滤状态
-            limit: 返回数量
-            
-        Returns:
-            会话列表
-        """
         if status:
             sessions = self.session_repo.get_by_status(status)[:limit]
         else:
@@ -294,15 +268,6 @@ class TradingSessionService:
         ]
     
     def _calculate_session_statistics(self, session_id: int) -> Dict[str, Any]:
-        """
-        计算会话统计数据
-        
-        Args:
-            session_id: 会话 ID
-            
-        Returns:
-            统计数据字典
-        """
         # 交易统计
         trade_stats = self.trade_repo.get_session_statistics(session_id)
         

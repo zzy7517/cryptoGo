@@ -7,11 +7,11 @@ from fastapi import HTTPException, Depends, Query, Body
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 
-from app.utils.database import get_db
-from app.services.trading_session_service import TradingSessionService
-from app.services.trading_agent_service import get_background_agent_manager
-from app.utils.logging import get_logger
-from app.utils.exceptions import BusinessException
+from ...utils.database import get_db
+from ...services.trading_session_service import TradingSessionService
+from ...services.trading_agent_service import get_background_agent_manager
+from ...utils.logging import get_logger
+from ...utils.exceptions import BusinessException
 
 logger = get_logger(__name__)
 
@@ -202,7 +202,7 @@ async def get_ai_decisions(
     用于前端展示聊天记录。
     """
     try:
-        from app.repositories.ai_decision_repo import AIDecisionRepository
+        from ...repositories.ai_decision_repo import AIDecisionRepository
 
         decision_repo = AIDecisionRepository(db)
         decisions = decision_repo.get_by_session(session_id, limit=limit)

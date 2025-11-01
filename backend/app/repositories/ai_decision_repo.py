@@ -7,18 +7,21 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from app.models.ai_decision import AIDecision
-from app.repositories.base import BaseRepository
-from app.utils.logging import get_logger
+from ..models.ai_decision import AIDecision
+from ..utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-class AIDecisionRepository(BaseRepository[AIDecision]):
+class AIDecisionRepository:
     """AI 决策数据访问层"""
     
     def __init__(self, db: Session):
-        super().__init__(AIDecision, db)
+        self.db = db
+    
+    def get_by_id(self, id: int) -> Optional[AIDecision]:
+        """根据 ID 获取 AI 决策"""
+        return self.db.query(AIDecision).filter(AIDecision.id == id).first()
     
     def save_decision(
         self,
@@ -32,25 +35,8 @@ class AIDecisionRepository(BaseRepository[AIDecision]):
         suggested_actions: Optional[List[Dict]] = None,
         executed: bool = False
     ) -> AIDecision:
-        """
-        保存 AI 决策
-        
-        Args:
-            session_id: 所属会话 ID
-            symbols: 分析的币种列表
-            decision_type: 决策类型 (buy, sell, hold, rebalance)
-            confidence: 置信度 0-1
-            prompt_data: 完整的 prompt 数据
-            ai_response: AI 的原始回复
-            reasoning: AI 的推理过程
-            suggested_actions: 建议的具体操作
-            executed: 是否已执行 (默认 False)
-            
-        Returns:
-            创建的 AIDecision 实例
-        """
         try:
-            decision = self.create(
+            decision = AIDecision(
                 session_id=session_id,
                 symbols=symbols,
                 decision_type=decision_type,
@@ -61,6 +47,9 @@ class AIDecisionRepository(BaseRepository[AIDecision]):
                 suggested_actions=suggested_actions or [],
                 executed=executed
             )
+            self.db.add(decision)
+            self.db.commit()
+            self.db.refresh(decision)
             
             logger.info(
                 "AI 决策已保存",
@@ -82,16 +71,6 @@ class AIDecisionRepository(BaseRepository[AIDecision]):
         session_id: int,
         limit: int = 100
     ) -> List[AIDecision]:
-        """
-        获取指定会话的所有决策
-        
-        Args:
-            session_id: 会话 ID
-            limit: 返回数量
-            
-        Returns:
-            决策列表
-        """
         return self.db.query(AIDecision)\
             .filter(AIDecision.session_id == session_id)\
             .order_by(desc(AIDecision.created_at))\

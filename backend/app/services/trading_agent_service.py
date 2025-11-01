@@ -13,18 +13,18 @@ import asyncio
 import json
 from pathlib import Path
 
-from app.services.data_collector import get_exchange_connector
-from app.services.ai_engine import get_ai_engine
-from app.services.prompt_builder import build_advanced_prompt
-from app.services.trader_service import get_trader
-from app.exchanges.base import PositionSide as TraderPositionSide
-from app.services.response_parser import ResponseParser, Decision as ParsedDecision
-from app.repositories.position_repo import PositionRepository
-from app.repositories.trade_repo import TradeRepository
-from app.repositories.ai_decision_repo import AIDecisionRepository
-from app.repositories.trading_session_repo import TradingSessionRepository
-from app.utils.database import get_db
-from app.utils.logging import get_logger
+from ..utils.data_collector import get_exchange
+from .llm_service import get_llm
+from ..llm.prompt_builder import build_user_prompt
+from .trader_service import get_trader
+from ..exchanges.base import PositionSide as TraderPositionSide
+from ..llm.response_parser import ResponseParser, Decision as ParsedDecision
+from ..repositories.position_repo import PositionRepository
+from ..repositories.trade_repo import TradeRepository
+from ..repositories.ai_decision_repo import AIDecisionRepository
+from ..repositories.trading_session_repo import TradingSessionRepository
+from ..utils.database import get_db
+from ..utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -120,8 +120,8 @@ async def build_system_prompt(risk_params: Dict[str, Any], session_id: int) -> s
     with open(prompt_file, 'r', encoding='utf-8') as f:
         template = f.read()
     
-    # 获取账户净值
-    from app.services.account_service import get_account_service
+        # 获取账户净值
+        from .account_service import get_account_service
     account_service = get_account_service()
     account_info = account_service.get_account_info()
     account_equity = account_info.get('totalMarginBalance', 10000)  # 默认10000
@@ -222,9 +222,8 @@ async def get_ai_decision(
         # 构建系统提示词
         system_prompt = await build_system_prompt(context.risk_params, context.session_id)
         
-        # 构建用户提示词（使用高级提示词）
-        logger.info("📝 构建高级提示词")
-        user_prompt = await build_advanced_prompt(
+        logger.info("📝 构建用户提示词")
+        user_prompt = await build_user_prompt(
             session_id=context.session_id,
             symbols=context.symbols,
             call_count=context.call_count,
@@ -232,7 +231,7 @@ async def get_ai_decision(
         )
         
         # 调用 AI
-        ai_engine = get_ai_engine()
+        ai_engine = get_llm()
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
@@ -281,7 +280,7 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
             # 根据不同的 action 执行不同的操作
             if decision.action == "open_long":
                 # 获取当前价格用于计算数量
-                exchange = get_exchange_connector()
+                exchange = get_exchange()
                 # 使用 asyncio.to_thread 避免阻塞事件循环
                 ticker = await asyncio.to_thread(exchange.get_ticker, decision.symbol)
                 current_price = ticker.get('last') or 0
@@ -368,7 +367,7 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
                 
             elif decision.action == "open_short":
                 # 获取当前价格用于计算数量
-                exchange = get_exchange_connector()
+                exchange = get_exchange()
                 # 使用 asyncio.to_thread 避免阻塞事件循环
                 ticker = await asyncio.to_thread(exchange.get_ticker, decision.symbol)
                 current_price = ticker.get('last') or 0
@@ -1043,7 +1042,7 @@ class BackgroundAgentManager:
                 db = next(get_db())
                 try:
                     def update_session():
-                        from app.services.trading_session_service import TradingSessionService
+                        from .trading_session_service import TradingSessionService
                         session_service = TradingSessionService(db)
                         session_service.end_session(
                             session_id=session_id,
@@ -1083,7 +1082,7 @@ class BackgroundAgentManager:
         db = next(get_db())
         try:
             def update():
-                from app.models import TradingSession
+                from ..models.trading_session import TradingSession
                 session = db.query(TradingSession).filter_by(id=session_id).first()
                 if session:
                     for key, value in kwargs.items():
@@ -1110,7 +1109,7 @@ class BackgroundAgentManager:
         db = next(get_db())
         try:
             def query():
-                from app.models import TradingSession
+                from ..models.trading_session import TradingSession
                 session = db.query(TradingSession).filter_by(id=session_id).first()
                 if not session:
                     return None
@@ -1144,7 +1143,7 @@ class BackgroundAgentManager:
         db = next(get_db())
         try:
             def update():
-                from app.models import TradingSession
+                from ..models.trading_session import TradingSession
                 session = db.query(TradingSession).filter_by(id=session_id).first()
                 if session:
                     session.decision_count = (session.decision_count or 0) + 1
@@ -1152,12 +1151,35 @@ class BackgroundAgentManager:
                     # 清除错误信息（成功执行后）
                     session.last_error = None
                     db.commit()
+                    db.close()  # 在 commit 成功后立即关闭
             
             await asyncio.to_thread(update)
+        except asyncio.CancelledError:
+            # 任务被取消，安全地回滚并关闭数据库连接
+            try:
+                db.rollback()
+            except Exception:
+                logger.error(f"回滚数据库失败: {e}")
+                pass
+            finally:
+                try:
+                    db.close()
+                except Exception:
+                    logger.error(f"关闭数据库连接失败: {e}")
+                    pass
+            raise  # 重新抛出 CancelledError
         except Exception as e:
             logger.error(f"更新决策次数失败: {e}", session_id=session_id)
-        finally:
-            db.close()
+            try:
+                db.rollback()
+            except Exception:
+                logger.error(f"回滚数据库失败: {e}")
+                pass
+            try:
+                db.close()
+            except Exception:
+                logger.error(f"关闭数据库连接失败: {e}")
+                pass
     
     async def _check_session_running(self, session_id: int) -> bool:
         """检查会话是否仍在运行"""
