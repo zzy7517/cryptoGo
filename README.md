@@ -102,6 +102,14 @@ npm run dev
 [TODO.md](./TODO.md)
 
 
+## 🙏 Acknowledgments
+
+感谢以下开源项目对本项目的启发和帮助：
+
+- [nofx](https://github.com/tinkle-community/nofx) - 
+- [AI-Trader](https://github.com/HKUDS/AI-Trader) - AI驱动的金融市场交易系统
+
+
 ## 📄 License
 
 MIT

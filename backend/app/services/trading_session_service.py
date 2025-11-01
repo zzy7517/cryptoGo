@@ -8,10 +8,10 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from ..repositories.trading_session_repo import TradingSessionRepository
-from ..repositories.position_repo import PositionRepository
 from ..repositories.trade_repo import TradeRepository
 from ..repositories.ai_decision_repo import AIDecisionRepository
 from ..models.trading_session import TradingSession
+from ..services.account_service import get_account_service
 from ..utils.logging import get_logger
 from ..utils.exceptions import BusinessException
 
@@ -24,9 +24,9 @@ class TradingSessionService:
     def __init__(self, db: Session):
         self.db = db
         self.session_repo = TradingSessionRepository(db)
-        self.position_repo = PositionRepository(db)
         self.trade_repo = TradeRepository(db)
         self.decision_repo = AIDecisionRepository(db)
+        self.account_service = get_account_service()
     
     def start_session(
         self,
@@ -164,14 +164,19 @@ class TradingSessionService:
                 f"会话 {session_id} 不存在",
                 error_code="SESSION_NOT_FOUND"
             )
-        
-        # 获取持仓
-        positions = self.position_repo.get_by_session(session_id)
-        active_positions = [p for p in positions if p.status == 'active']
-        
+
+        # 从交易所API获取实时持仓信息
+        try:
+            positions = self.account_service.get_positions()
+            active_positions = [p for p in positions if float(p.get('contracts', 0)) != 0]
+        except Exception as e:
+            logger.warning(f"获取持仓信息失败: {str(e)}，返回空列表")
+            positions = []
+            active_positions = []
+
         # 获取交易
         trades = self.trade_repo.get_by_session(session_id)
-        
+
         # 获取 AI 决策
         decisions = self.decision_repo.get_by_session(session_id)
 
@@ -194,17 +199,19 @@ class TradingSessionService:
             },
             "positions": [
                 {
-                    "id": p.id,
-                    "symbol": p.symbol,
-                    "side": p.side,
-                    "quantity": float(p.quantity) if p.quantity else 0,
-                    "entry_price": float(p.entry_price) if p.entry_price else 0,
-                    "current_price": float(p.current_price) if p.current_price else 0,
-                    "unrealized_pnl": float(p.unrealized_pnl) if p.unrealized_pnl else 0,
-                    "unrealized_pnl_pct": float(p.unrealized_pnl) / float(p.entry_price * p.quantity) * 100 if p.entry_price and p.quantity and float(p.entry_price * p.quantity) != 0 else 0,
-                    "status": p.status,
-                    "leverage": p.leverage,
-                    "created_at": p.created_at.isoformat() if p.created_at else None
+                    "symbol": p.get('symbol'),
+                    "side": p.get('side'),
+                    "contracts": float(p.get('contracts', 0)),
+                    "contractSize": float(p.get('contractSize', 0)),
+                    "entryPrice": float(p.get('entryPrice', 0)),
+                    "markPrice": float(p.get('markPrice', 0)),
+                    "liquidationPrice": float(p.get('liquidationPrice', 0)),
+                    "leverage": float(p.get('leverage', 0)),
+                    "unrealizedPnl": float(p.get('unrealizedPnl', 0)),
+                    "percentage": float(p.get('percentage', 0)),
+                    "notional": float(p.get('notional', 0)),
+                    "collateral": float(p.get('collateral', 0)),
+                    "marginMode": p.get('marginMode'),
                 }
                 for p in positions
             ],
@@ -215,10 +222,8 @@ class TradingSessionService:
                     "side": t.side,
                     "quantity": float(t.quantity) if t.quantity else 0,
                     "price": float(t.price) if t.price else 0,
-                    "status": t.status,
                     "order_type": t.order_type,
                     "created_at": t.created_at.isoformat() if t.created_at else None,
-                    "executed_at": t.executed_at.isoformat() if t.executed_at else None
                 }
                 for t in trades
             ],
@@ -270,11 +275,7 @@ class TradingSessionService:
     def _calculate_session_statistics(self, session_id: int) -> Dict[str, Any]:
         # 交易统计
         trade_stats = self.trade_repo.get_session_statistics(session_id)
-        
-        # 持仓统计
-        positions = self.position_repo.get_by_session(session_id, limit=10000)
-        total_pnl = self.position_repo.get_total_pnl(session_id)
-        
+
         return {
             "total_trades": trade_stats["total_trades"],
             "winning_trades": trade_stats["winning_trades"],

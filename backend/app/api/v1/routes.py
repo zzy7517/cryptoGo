@@ -1,10 +1,10 @@
 """
 集中式路由定义
 创建时间: 2025-10-29
-更新时间: 2025-11-01（使用通用 account_handlers）
+更新时间: 2025-11-01（清理未使用的路由，保持精简）
 """
 from fastapi import APIRouter
-from . import session_handlers, agent_handlers, market_handlers, account_handlers
+from . import session_handlers, agent_handlers, account_handlers, config_handlers
 
 # 创建 v1 API 路由器
 api_v1_router = APIRouter(prefix="/api/v1")
@@ -69,15 +69,6 @@ session_router.add_api_route(
 # ============================================
 agent_router = APIRouter(prefix="/agent", tags=["Agent"])
 
-# POST /api/v1/agent/sessions/{session_id}/run-once - 运行一次决策
-agent_router.add_api_route(
-    "/sessions/{session_id}/run-once",
-    agent_handlers.run_agent_once,
-    methods=["POST"],
-    summary="运行一次决策周期（单次执行）",
-    response_model=agent_handlers.RunAgentResponse
-)
-
 # POST /api/v1/agent/sessions/{session_id}/start-background - 启动后台Agent
 agent_router.add_api_route(
     "/sessions/{session_id}/start-background",
@@ -87,6 +78,7 @@ agent_router.add_api_route(
 )
 
 # POST /api/v1/agent/sessions/{session_id}/stop-background - 停止后台Agent
+# 注意：此端点被内部逻辑使用（会话结束、程序关闭时自动停止Agent）
 agent_router.add_api_route(
     "/sessions/{session_id}/stop-background",
     agent_handlers.stop_background_agent,
@@ -102,103 +94,11 @@ agent_router.add_api_route(
     summary="获取后台 Agent 状态"
 )
 
-# GET /api/v1/agent/background-agents/list - 列出所有后台Agent
-agent_router.add_api_route(
-    "/background-agents/list",
-    agent_handlers.list_background_agents,
-    methods=["GET"],
-    summary="列出所有后台运行的 Agent"
-)
-
-# POST /api/v1/agent/test - 测试Agent
-agent_router.add_api_route(
-    "/test",
-    agent_handlers.test_agent,
-    methods=["POST"],
-    summary="测试 Agent（单次运行，不需要真实会话）"
-)
-
-
-# ============================================
-# Market 路由
-# ============================================
-market_router = APIRouter(prefix="/market", tags=["market"])
-
-# GET /api/v1/market/klines - 获取K线数据
-market_router.add_api_route(
-    "/klines",
-    market_handlers.get_klines,
-    methods=["GET"],
-    summary="获取K线数据",
-    response_model=market_handlers.KlineResponse
-)
-
-# GET /api/v1/market/ticker - 获取实时行情
-market_router.add_api_route(
-    "/ticker",
-    market_handlers.get_ticker,
-    methods=["GET"],
-    summary="获取实时行情数据",
-    response_model=market_handlers.TickerData
-)
-
-# GET /api/v1/market/symbols - 获取交易对列表
-market_router.add_api_route(
-    "/symbols",
-    market_handlers.get_symbols,
-    methods=["GET"],
-    summary="获取交易对列表",
-    response_model=market_handlers.SymbolListResponse
-)
-
-# GET /api/v1/market/funding-rate - 获取资金费率
-market_router.add_api_route(
-    "/funding-rate",
-    market_handlers.get_funding_rate,
-    methods=["GET"],
-    summary="获取资金费率（仅限合约市场）",
-    response_model=market_handlers.FundingRateData
-)
-
-# GET /api/v1/market/open-interest - 获取持仓量
-market_router.add_api_route(
-    "/open-interest",
-    market_handlers.get_open_interest,
-    methods=["GET"],
-    summary="获取持仓量（仅限合约市场）",
-    response_model=market_handlers.OpenInterestData
-)
-
-# GET /api/v1/market/indicators - 获取技术指标
-market_router.add_api_route(
-    "/indicators",
-    market_handlers.get_indicators,
-    methods=["GET"],
-    summary="获取技术指标",
-    response_model=market_handlers.IndicatorsResponse
-)
-
 
 # ============================================
 # Account 路由（通用，自动根据配置使用对应交易所）
 # ============================================
 account_router = APIRouter(prefix="/account", tags=["account"])
-
-# GET /api/v1/account/info - 获取账户信息
-account_router.add_api_route(
-    "/info",
-    account_handlers.get_account_info,
-    methods=["GET"],
-    summary="获取账户信息（自动根据配置使用对应交易所）"
-)
-
-# GET /api/v1/account/positions - 获取持仓信息
-account_router.add_api_route(
-    "/positions",
-    account_handlers.get_positions,
-    methods=["GET"],
-    summary="获取持仓信息（自动根据配置使用对应交易所）"
-)
 
 # GET /api/v1/account/summary - 获取账户摘要
 account_router.add_api_route(
@@ -210,10 +110,25 @@ account_router.add_api_route(
 
 
 # ============================================
+# Config 路由
+# ============================================
+config_router = APIRouter(prefix="/config", tags=["config"])
+
+# GET /api/v1/config/trading-pairs - 获取默认交易对配置
+config_router.add_api_route(
+    "/trading-pairs",
+    config_handlers.get_trading_pairs,
+    methods=["GET"],
+    summary="获取默认交易对配置",
+    response_model=config_handlers.TradingPairsResponse
+)
+
+
+# ============================================
 # 注册所有子路由到 v1 router
 # ============================================
 api_v1_router.include_router(session_router)
 api_v1_router.include_router(agent_router)
-api_v1_router.include_router(market_router)
 api_v1_router.include_router(account_router)
+api_v1_router.include_router(config_router)
 

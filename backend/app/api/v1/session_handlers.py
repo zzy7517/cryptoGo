@@ -3,7 +3,7 @@
 所有会话相关的业务逻辑处理
 创建时间: 2025-10-29
 """
-from fastapi import HTTPException, Depends, Query, Body
+from fastapi import HTTPException, Depends, Query
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 
@@ -12,14 +12,13 @@ from ...services.trading_session_service import TradingSessionService
 from ...services.trading_agent_service import get_background_agent_manager
 from ...utils.logging import get_logger
 from ...utils.exceptions import BusinessException
+from ...schemas.session import StartSessionRequest, EndSessionRequest
 
 logger = get_logger(__name__)
 
 
 async def start_session(
-    session_name: Optional[str] = Body(None, description="会话名称"),
-    initial_capital: Optional[float] = Body(None, description="初始资金"),
-    config: Optional[Dict[str, Any]] = Body(None, description="配置信息"),
+    request: StartSessionRequest,
     db: Session = Depends(get_db)
 ):
     """
@@ -30,9 +29,9 @@ async def start_session(
     try:
         service = TradingSessionService(db)
         session = service.start_session(
-            session_name=session_name,
-            initial_capital=initial_capital,
-            config=config
+            session_name=request.session_name,
+            initial_capital=request.initial_capital,
+            config=request.config
         )
         
         return {
@@ -54,9 +53,7 @@ async def start_session(
 
 
 async def end_session(
-    session_id: Optional[int] = Body(None, description="会话 ID，不提供则结束当前活跃会话"),
-    status: str = Body("completed", description="结束状态: completed, stopped, crashed"),
-    notes: Optional[str] = Body(None, description="备注信息"),
+    request: EndSessionRequest,
     db: Session = Depends(get_db)
 ):
     """
@@ -66,11 +63,18 @@ async def end_session(
     同时自动停止该会话的交易代理（如果正在运行）。
     """
     try:
+        logger.info(
+            f"收到结束会话请求",
+            session_id=request.session_id,
+            status=request.status,
+            notes=request.notes
+        )
+        
         service = TradingSessionService(db)
         session = service.end_session(
-            session_id=session_id,
-            status=status,
-            notes=notes
+            session_id=request.session_id,
+            status=request.status,
+            notes=request.notes
         )
         
         # 自动停止该会话的 Agent（如果正在运行）
@@ -79,7 +83,7 @@ async def end_session(
         
         if agent_status:
             try:
-                manager.stop_background_agent(session.id)
+                await manager.stop_background_agent(session.id)
                 logger.info(f"已自动停止会话 {session.id} 的 Agent")
             except Exception as e:
                 logger.warning(f"停止 Agent 失败: {str(e)}")

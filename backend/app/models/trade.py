@@ -48,9 +48,8 @@ class Trade(Base):
     # 盈亏（仅平仓时）
     pnl = Column(Numeric(20, 4), comment="盈亏金额")
     pnl_pct = Column(Numeric(10, 4), comment="盈亏百分比")
-    
+
     # 关联
-    position_id = Column(BigInteger, comment="关联的持仓ID")
     ai_decision_id = Column(BigInteger, comment="关联的AI决策ID")
     exchange_order_id = Column(String(100), comment="交易所订单ID")
     
@@ -60,7 +59,6 @@ class Trade(Base):
         CheckConstraint("order_type IN ('market', 'limit', 'stop', 'stop_limit')", name='check_trade_order_type'),
         Index('idx_trade_session', 'session_id'),
         Index('idx_trade_symbol_created', 'symbol', 'created_at'),
-        Index('idx_trade_position_id', 'position_id'),
         Index('idx_trade_created_at', 'created_at'),
     )
     

@@ -27,10 +27,9 @@ class OrderType(str, Enum):
 
 
 class PositionSide(str, Enum):
-    """持仓方向（合约）"""
+    """持仓方向（合约）- 仅支持双向持仓"""
     LONG = "long"
     SHORT = "short"
-    BOTH = "both"  # 双向持仓模式
 
 
 class OrderResult:

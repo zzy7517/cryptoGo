@@ -37,13 +37,12 @@ class TradeRepository:
         leverage: int = 1,
         fee: Optional[Decimal] = None,
         fee_currency: Optional[str] = None,
-        position_id: Optional[int] = None,
         ai_decision_id: Optional[int] = None,
         exchange_order_id: Optional[str] = None
     ) -> Trade:
         """
         创建交易记录
-        
+
         Args:
             session_id: 所属会话 ID
             symbol: 交易对
@@ -55,10 +54,9 @@ class TradeRepository:
             leverage: 杠杆
             fee: 手续费
             fee_currency: 手续费币种
-            position_id: 关联持仓 ID
             ai_decision_id: 关联 AI 决策 ID
             exchange_order_id: 交易所订单 ID
-            
+
         Returns:
             创建的 Trade 实例
         """
@@ -74,7 +72,6 @@ class TradeRepository:
                 leverage=leverage,
                 fee=fee,
                 fee_currency=fee_currency,
-                position_id=position_id,
                 ai_decision_id=ai_decision_id,
                 exchange_order_id=exchange_order_id,
                 entry_time=datetime.now()

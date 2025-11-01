@@ -19,7 +19,6 @@ from ..llm.prompt_builder import build_user_prompt
 from .trader_service import get_trader
 from ..exchanges.base import PositionSide as TraderPositionSide
 from ..llm.response_parser import ResponseParser, Decision as ParsedDecision
-from ..repositories.position_repo import PositionRepository
 from ..repositories.trade_repo import TradeRepository
 from ..repositories.ai_decision_repo import AIDecisionRepository
 from ..repositories.trading_session_repo import TradingSessionRepository
@@ -271,7 +270,6 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
     try:
         db = next(get_db())
         try:
-            position_repo = PositionRepository(db)
             trade_repo = TradeRepository(db)
             
             # 创建交易器（自动从配置读取交易所类型）
@@ -324,21 +322,8 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
                 if not order_result.success:
                     logger.error(f"❌ 开多仓失败: {order_result.error}")
                     return {"success": False, "error": order_result.error}
-                
-                # 创建持仓记录
-                position = position_repo.create_position(
-                    session_id=session_id,
-                    symbol=decision.symbol,
-                    side='long',
-                    quantity=Decimal(str(order_result.filled_quantity or quantity)),
-                    entry_price=Decimal(str(order_result.avg_price or current_price)),
-                    leverage=decision.leverage,
-                    stop_loss=Decimal(str(stop_loss_price)) if stop_loss_price else None,
-                    take_profit=Decimal(str(take_profit_price)) if take_profit_price else None,
-                    entry_order_id=int(order_result.order_id) if order_result.order_id and order_result.order_id.isdigit() else None
-                )
-                
-                # 创建交易记录
+
+                # 创建交易记录（不再创建持仓记录，持仓信息从交易所API获取）
                 trade = trade_repo.create_trade(
                     session_id=session_id,
                     symbol=decision.symbol,
@@ -350,15 +335,13 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
                     leverage=decision.leverage,
                     fee=Decimal(str(order_result.fee)) if order_result.fee else None,
                     fee_currency=order_result.fee_currency,
-                    position_id=position.id,
                     exchange_order_id=order_result.order_id
                 )
-                
-                logger.info(f"✅ 开多仓成功: {decision.symbol}, 仓位ID={position.id}, 交易ID={trade.id}")
+
+                logger.info(f"✅ 开多仓成功: {decision.symbol}, 交易ID={trade.id}")
                 return {
                     "success": True,
                     "action": "open_long",
-                    "position_id": position.id,
                     "trade_id": trade.id,
                     "order_id": order_result.order_id,
                     "entry_price": float(order_result.avg_price or current_price),
@@ -411,21 +394,8 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
                 if not order_result.success:
                     logger.error(f"❌ 开空仓失败: {order_result.error}")
                     return {"success": False, "error": order_result.error}
-                
-                # 创建持仓记录
-                position = position_repo.create_position(
-                    session_id=session_id,
-                    symbol=decision.symbol,
-                    side='short',
-                    quantity=Decimal(str(order_result.filled_quantity or quantity)),
-                    entry_price=Decimal(str(order_result.avg_price or current_price)),
-                    leverage=decision.leverage,
-                    stop_loss=Decimal(str(stop_loss_price)) if stop_loss_price else None,
-                    take_profit=Decimal(str(take_profit_price)) if take_profit_price else None,
-                    entry_order_id=int(order_result.order_id) if order_result.order_id and order_result.order_id.isdigit() else None
-                )
-                
-                # 创建交易记录
+
+                # 创建交易记录（不再创建持仓记录，持仓信息从交易所API获取）
                 trade = trade_repo.create_trade(
                     session_id=session_id,
                     symbol=decision.symbol,
@@ -437,15 +407,13 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
                     leverage=decision.leverage,
                     fee=Decimal(str(order_result.fee)) if order_result.fee else None,
                     fee_currency=order_result.fee_currency,
-                    position_id=position.id,
                     exchange_order_id=order_result.order_id
                 )
-                
-                logger.info(f"✅ 开空仓成功: {decision.symbol}, 仓位ID={position.id}, 交易ID={trade.id}")
+
+                logger.info(f"✅ 开空仓成功: {decision.symbol}, 交易ID={trade.id}")
                 return {
                     "success": True,
                     "action": "open_short",
-                    "position_id": position.id,
                     "trade_id": trade.id,
                     "order_id": order_result.order_id,
                     "entry_price": float(order_result.avg_price or current_price),
@@ -453,69 +421,69 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
                 }
                 
             elif decision.action in ["close_long", "close_short"]:
-                # 平仓：查找对应的持仓
+                # 平仓：从交易所API查找对应的持仓
                 side = "long" if decision.action == "close_long" else "short"
-                positions = position_repo.get_active_positions(session_id)
-                
+
+                # 从交易所获取实时持仓
+                exchange = get_exchange()
+                positions = await asyncio.to_thread(exchange.get_positions)
+
                 target_position = None
                 for pos in positions:
-                    if pos.symbol == decision.symbol and pos.side == side:
+                    # ccxt返回的持仓格式: {'symbol': 'BTC/USDT:USDT', 'side': 'long', 'contracts': 0.001, ...}
+                    if pos.get('symbol') == decision.symbol and pos.get('side') == side:
                         target_position = pos
                         break
-                
-                if not target_position:
+
+                if not target_position or float(target_position.get('contracts', 0)) == 0:
                     logger.warning(f"⚠️ 未找到要平仓的持仓: {decision.symbol} {side}")
                     return {"success": False, "error": "持仓不存在"}
-                
+
+                quantity = float(target_position.get('contracts', 0))
+
                 # 执行平仓交易
                 position_side = TraderPositionSide.LONG if side == "long" else TraderPositionSide.SHORT
-                logger.info(f"🔻 平仓: {decision.symbol} {side}")
+                logger.info(f"🔻 平仓: {decision.symbol} {side} 数量={quantity}")
                 # 使用 asyncio.to_thread 避免阻塞事件循环
                 order_result = await asyncio.to_thread(
                     trader.close_position,
                     symbol=decision.symbol,
                     position_side=position_side,
-                    quantity=float(target_position.quantity)
+                    quantity=quantity
                 )
-                
+
                 if not order_result.success:
                     logger.error(f"❌ 平仓失败: {order_result.error}")
                     return {"success": False, "error": order_result.error}
                 
-                # 更新持仓记录
-                exit_price = Decimal(str(order_result.avg_price)) if order_result.avg_price else target_position.current_price
-                position_repo.close_position(
-                    target_position.id,
-                    exit_price,
-                    exit_order_id=int(order_result.order_id) if order_result.order_id and order_result.order_id.isdigit() else None
-                )
-                
-                # 创建交易记录
+                # 创建交易记录（不再关联持仓记录）
                 trade_side = 'sell' if side == 'long' else 'buy'
+                exit_price = Decimal(str(order_result.avg_price)) if order_result.avg_price else Decimal(str(target_position.get('markPrice', 0)))
+                filled_quantity = order_result.filled_quantity or quantity
+                leverage_value = int(target_position.get('leverage', 1))
+
                 trade = trade_repo.create_trade(
                     session_id=session_id,
                     symbol=decision.symbol,
                     side=trade_side,
-                    quantity=Decimal(str(order_result.filled_quantity or target_position.quantity)),
+                    quantity=Decimal(str(filled_quantity)),
                     price=exit_price,
-                    total_value=Decimal(str(float(order_result.filled_quantity or target_position.quantity) * float(exit_price))),
+                    total_value=Decimal(str(float(filled_quantity) * float(exit_price))),
                     order_type='market',
-                    leverage=target_position.leverage,
+                    leverage=leverage_value,
                     fee=Decimal(str(order_result.fee)) if order_result.fee else None,
                     fee_currency=order_result.fee_currency,
-                    position_id=target_position.id,
                     exchange_order_id=order_result.order_id
                 )
-                
-                logger.info(f"✅ 平仓成功: {decision.symbol} {side}, 仓位ID={target_position.id}, 交易ID={trade.id}")
+
+                logger.info(f"✅ 平仓成功: {decision.symbol} {side}, 交易ID={trade.id}")
                 return {
                     "success": True,
                     "action": decision.action,
-                    "position_id": target_position.id,
                     "trade_id": trade.id,
                     "order_id": order_result.order_id,
                     "exit_price": float(exit_price),
-                    "quantity": float(order_result.filled_quantity or target_position.quantity)
+                    "quantity": float(filled_quantity)
                 }
                 
             elif decision.action == "hold":
@@ -1054,8 +1022,15 @@ class BackgroundAgentManager:
                     logger.info(f"✅ 已将会话 {session_id} 状态改为 crashed")
                 except Exception as update_error:
                     logger.error(f"更新会话状态失败: {str(update_error)}")
+                    try:
+                        db.rollback()
+                    except Exception:
+                        pass
                 finally:
-                    db.close()
+                    try:
+                        db.close()
+                    except Exception as close_error:
+                        logger.debug(f"关闭数据库会话时出错: {close_error}")
             except Exception as db_error:
                 logger.error(f"数据库操作失败: {str(db_error)}")
         
@@ -1093,8 +1068,15 @@ class BackgroundAgentManager:
             await asyncio.to_thread(update)
         except Exception as e:
             logger.error(f"更新会话状态失败: {e}", session_id=session_id)
+            try:
+                db.rollback()
+            except Exception:
+                pass
         finally:
-            db.close()
+            try:
+                db.close()
+            except Exception as close_error:
+                logger.debug(f"关闭数据库会话时出错: {close_error}")
     
     async def _get_session_status(self, session_id: int) -> Optional[Dict[str, Any]]:
         """
@@ -1131,7 +1113,10 @@ class BackgroundAgentManager:
             logger.error(f"获取会话状态失败: {e}", session_id=session_id)
             return None
         finally:
-            db.close()
+            try:
+                db.close()
+            except Exception as close_error:
+                logger.debug(f"关闭数据库会话时出错: {close_error}")
     
     async def _increment_decision_count(self, session_id: int):
         """
@@ -1151,51 +1136,45 @@ class BackgroundAgentManager:
                     # 清除错误信息（成功执行后）
                     session.last_error = None
                     db.commit()
-                    db.close()  # 在 commit 成功后立即关闭
             
             await asyncio.to_thread(update)
         except asyncio.CancelledError:
             # 任务被取消，安全地回滚并关闭数据库连接
             try:
                 db.rollback()
-            except Exception:
-                logger.error(f"回滚数据库失败: {e}")
-                pass
-            finally:
-                try:
-                    db.close()
-                except Exception:
-                    logger.error(f"关闭数据库连接失败: {e}")
-                    pass
+            except Exception as rollback_error:
+                logger.debug(f"回滚数据库失败: {rollback_error}")
             raise  # 重新抛出 CancelledError
         except Exception as e:
             logger.error(f"更新决策次数失败: {e}", session_id=session_id)
             try:
                 db.rollback()
             except Exception:
-                logger.error(f"回滚数据库失败: {e}")
                 pass
+        finally:
             try:
                 db.close()
-            except Exception:
-                logger.error(f"关闭数据库连接失败: {e}")
-                pass
+            except Exception as close_error:
+                logger.debug(f"关闭数据库会话时出错: {close_error}")
     
     async def _check_session_running(self, session_id: int) -> bool:
         """检查会话是否仍在运行"""
+        db = next(get_db())
         try:
-            db = next(get_db())
-            try:
-                def query():
-                    session_repo = TradingSessionRepository(db)
-                    session = session_repo.get_by_id(session_id)
-                    return session is not None and session.status == 'running'
-                
-                return await asyncio.to_thread(query)
-            finally:
-                db.close()
-        except Exception:
+            def query():
+                session_repo = TradingSessionRepository(db)
+                session = session_repo.get_by_id(session_id)
+                return session is not None and session.status == 'running'
+            
+            return await asyncio.to_thread(query)
+        except Exception as e:
+            logger.debug(f"检查会话状态失败: {e}", session_id=session_id)
             return False
+        finally:
+            try:
+                db.close()
+            except Exception as close_error:
+                logger.debug(f"关闭数据库会话时出错: {close_error}")
 
 
 # 全局单例

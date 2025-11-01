@@ -12,7 +12,6 @@ import numpy as np
 from ..utils.data_collector import get_exchange
 from ..utils.indicators import get_indicators_calculator
 from ..repositories.trading_session_repo import TradingSessionRepository
-from ..repositories.position_repo import PositionRepository
 from ..repositories.trade_repo import TradeRepository
 from ..utils.database import get_db
 from ..utils.logging import get_logger
@@ -304,67 +303,59 @@ class PromptDataCollector:
     
     async def collect_positions_detail(self) -> List[Dict[str, Any]]:
         """
-        收集详细的持仓信息（包括清算价格等）
-        
+        从交易所API收集详细的持仓信息（包括清算价格等）
+
         Returns:
             持仓列表
         """
-        db = next(get_db())
         try:
-            position_repo = PositionRepository(db)
-            positions = position_repo.get_active_positions(self.session_id)
-            
+            # 直接从交易所API获取实时持仓
+            positions = self.exchange.get_positions()
+
             position_list = []
             for p in positions:
-                # 计算清算价格（简化公式）
-                # 做多: liquidation_price = entry_price * (1 - 1/leverage)
-                # 做空: liquidation_price = entry_price * (1 + 1/leverage)
-                entry_price = float(p.entry_price)
-                leverage = p.leverage if p.leverage else 1
-                
-                if p.side == 'long':
-                    liquidation_price = entry_price * (1 - 0.9 / leverage)
-                else:  # short
-                    liquidation_price = entry_price * (1 + 0.9 / leverage)
-                
-                # 获取当前价格
-                try:
-                    ticker = self.exchange.get_ticker(p.symbol)
-                    current_price = ticker.get('last', entry_price)
-                except:
-                    current_price = entry_price
-                
-                # 计算未实现盈亏
-                quantity = float(p.quantity)
-                if p.side == 'long':
-                    unrealized_pnl = (current_price - entry_price) * quantity * leverage
-                else:  # short
-                    unrealized_pnl = (entry_price - current_price) * quantity * leverage
-                
+                # 过滤掉空持仓
+                contracts = float(p.get('contracts', 0))
+                if contracts == 0:
+                    continue
+
+                # 从交易所API返回的数据结构获取字段
+                symbol = p.get('symbol', '')
+                coin_symbol = symbol.split('/')[0] if '/' in symbol else symbol
+                entry_price = float(p.get('entryPrice', 0))
+                mark_price = float(p.get('markPrice', 0))
+                liquidation_price = float(p.get('liquidationPrice', 0))
+                unrealized_pnl = float(p.get('unrealizedPnl', 0))
+                leverage = int(p.get('leverage', 1))
+                side = p.get('side', 'long')
+                notional = float(p.get('notional', 0))
+
                 position_detail = {
-                    'symbol': p.symbol.split('/')[0] if '/' in p.symbol else p.symbol,
-                    'quantity': quantity,
+                    'symbol': coin_symbol,
+                    'quantity': contracts,
                     'entry_price': entry_price,
-                    'current_price': current_price,
+                    'current_price': mark_price,
                     'liquidation_price': round(liquidation_price, 2),
                     'unrealized_pnl': round(unrealized_pnl, 2),
                     'leverage': leverage,
+                    'side': side,
                     'exit_plan': {
-                        'profit_target': float(p.take_profit) if p.take_profit else None,
-                        'stop_loss': float(p.stop_loss) if p.stop_loss else None,
-                        'invalidation_condition': 'N/A'  # 可以后续增强
+                        'profit_target': None,  # 交易所API不返回止盈止损信息
+                        'stop_loss': None,
+                        'invalidation_condition': 'N/A'
                     },
-                    'confidence': 0.65,  # 默认值，后续可以从AI决策中获取
+                    'confidence': 0.65,  # 默认值
                     'risk_usd': abs(unrealized_pnl) if unrealized_pnl < 0 else 0,
-                    'notional_usd': current_price * quantity * leverage
+                    'notional_usd': notional
                 }
-                
+
                 position_list.append(position_detail)
-            
+
             return position_list
-            
-        finally:
-            db.close()
+
+        except Exception as e:
+            logger.error(f"收集持仓详情失败: {e}")
+            return []
 
 
 class PromptBuilder:

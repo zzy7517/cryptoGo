@@ -83,6 +83,8 @@ class BinanceFuturesClient:
         if signed:
             params = kwargs.get('params', {})
             params['timestamp'] = int(time.time() * 1000)
+            # 添加 recvWindow 参数，允许 60 秒的时间窗口容忍度
+            params['recvWindow'] = 60000
             params['signature'] = self._generate_signature(params)
             kwargs['params'] = params
         
@@ -106,11 +108,22 @@ class BinanceFuturesClient:
             return data
             
         except httpx.HTTPStatusError as e:
-            logger.error(
-                f"HTTP 错误: {e.response.status_code}",
-                endpoint=endpoint,
-                response=e.response.text
-            )
+            error_msg = e.response.text
+            try:
+                error_data = e.response.json()
+                error_msg = error_data.get('msg', error_msg)
+                logger.error(
+                    f"HTTP 错误: {e.response.status_code} - {error_msg}",
+                    endpoint=endpoint,
+                    code=error_data.get('code'),
+                    response=e.response.text
+                )
+            except:
+                logger.error(
+                    f"HTTP 错误: {e.response.status_code}",
+                    endpoint=endpoint,
+                    response=error_msg
+                )
             raise
         except Exception as e:
             logger.error(f"请求失败: {str(e)}", endpoint=endpoint)
@@ -127,10 +140,40 @@ class BinanceFuturesClient:
     
     # 获取持仓信息
     def get_position_risk(self, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        获取持仓信息
+        GET /fapi/v3/positionRisk
+
+        注意：只返回有持仓或有挂单的交易对
+
+        Args:
+            symbol: 交易对（可选），不传则返回所有
+
+        Returns:
+            持仓信息列表，包含以下字段：
+            - symbol: 交易对
+            - positionSide: 持仓方向（BOTH/LONG/SHORT）
+            - positionAmt: 持仓数量
+            - entryPrice: 开仓均价
+            - breakEvenPrice: 盈亏平衡价
+            - markPrice: 标记价格
+            - unRealizedProfit: 未实现盈亏
+            - liquidationPrice: 强平价格
+            - isolatedMargin: 逐仓保证金
+            - notional: 名义价值
+            - marginAsset: 保证金资产
+            - isolatedWallet: 逐仓钱包余额
+            - initialMargin: 当前所需起始保证金
+            - maintMargin: 维持保证金
+            - positionInitialMargin: 持仓所需起始保证金
+            - openOrderInitialMargin: 挂单所需起始保证金
+            - adl: 自动减仓等级
+            - updateTime: 更新时间
+        """
         params = {}
         if symbol:
             params['symbol'] = symbol
-        return self._request('GET', '/fapi/v2/positionRisk', signed=True, params=params)
+        return self._request('GET', '/fapi/v3/positionRisk', signed=True, params=params)
     
     # 获取账户交易历史
     def get_account_trades(
@@ -200,7 +243,7 @@ class BinanceFuturesClient:
             order_type: 订单类型，如 LIMIT, MARKET, STOP, STOP_MARKET, TAKE_PROFIT, TAKE_PROFIT_MARKET
             quantity: 数量
             price: 价格（限价单必填）
-            position_side: 持仓方向，BOTH, LONG, SHORT（双向持仓模式下使用）
+            position_side: 持仓方向，LONG 或 SHORT（双向持仓模式）
             time_in_force: 有效方式，GTC, IOC, FOK（限价单必填）
             reduce_only: 只减仓
             stop_price: 触发价格（止损/止盈单必填）
@@ -217,15 +260,19 @@ class BinanceFuturesClient:
         }
         
         if quantity:
-            params['quantity'] = quantity
+            # 格式化数量为字符串，保留足够的小数位（最多8位）
+            # 去除尾部的0，避免被Binance拒绝
+            params['quantity'] = f"{quantity:.8f}".rstrip('0').rstrip('.')
         if price:
-            params['price'] = price
+            # 格式化价格为字符串，保留足够的小数位（最多8位）
+            params['price'] = f"{price:.8f}".rstrip('0').rstrip('.')
         if time_in_force:
             params['timeInForce'] = time_in_force
         if reduce_only:
             params['reduceOnly'] = 'true'
         if stop_price:
-            params['stopPrice'] = stop_price
+            # 格式化止损价格为字符串，保留足够的小数位（最多8位）
+            params['stopPrice'] = f"{stop_price:.8f}".rstrip('0').rstrip('.')
         
         # 添加其他参数
         params.update(kwargs)

@@ -7,7 +7,6 @@
 -- ============================================
 
 DROP TABLE IF EXISTS trades CASCADE;
-DROP TABLE IF EXISTS positions CASCADE;
 DROP TABLE IF EXISTS ai_decisions CASCADE;
 DROP TABLE IF EXISTS trading_sessions CASCADE;
 
@@ -86,78 +85,7 @@ COMMENT ON COLUMN trading_sessions.config IS '运行配置（JSON格式）';
 
 
 -- ============================================
--- 2. 持仓记录表
--- ============================================
-
-CREATE TABLE positions (
-    id BIGSERIAL PRIMARY KEY,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    
-    -- 关联会话
-    session_id BIGINT REFERENCES trading_sessions(id) ON DELETE CASCADE,
-    
-    -- 基本信息
-    symbol VARCHAR(20) NOT NULL,
-    side VARCHAR(10) NOT NULL CHECK (side IN ('long', 'short')),
-    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'closed')),
-    
-    -- 持仓详情
-    quantity NUMERIC(20, 8) NOT NULL,
-    entry_price NUMERIC(20, 4) NOT NULL,
-    current_price NUMERIC(20, 4),
-    liquidation_price NUMERIC(20, 4),
-    leverage INTEGER DEFAULT 1,
-    margin NUMERIC(20, 4),
-    
-    -- 时间信息
-    entry_time TIMESTAMPTZ,
-    exit_time TIMESTAMPTZ,
-    holding_duration INTERVAL,
-    
-    -- 盈亏
-    unrealized_pnl NUMERIC(20, 4),
-    realized_pnl NUMERIC(20, 4),
-    
-    -- 风控
-    stop_loss NUMERIC(20, 4),
-    take_profit NUMERIC(20, 4),
-    
-    -- 关联信息
-    entry_order_id BIGINT,
-    exit_order_id BIGINT,
-    ai_decision_id BIGINT
-);
-
--- 索引
-CREATE INDEX idx_position_session ON positions(session_id);
-CREATE INDEX idx_position_symbol_status ON positions(symbol, status);
-CREATE INDEX idx_position_created_at ON positions(created_at);
-CREATE INDEX idx_position_status ON positions(status);
-
--- 注释
-COMMENT ON TABLE positions IS '持仓记录表';
-COMMENT ON COLUMN positions.session_id IS '所属交易会话ID';
-COMMENT ON COLUMN positions.symbol IS '交易对符号（如 BTCUSDT）';
-COMMENT ON COLUMN positions.side IS '持仓方向: long, short';
-COMMENT ON COLUMN positions.status IS '状态: active, closed';
-COMMENT ON COLUMN positions.quantity IS '持仓数量';
-COMMENT ON COLUMN positions.entry_price IS '入场价格';
-COMMENT ON COLUMN positions.current_price IS '当前价格';
-COMMENT ON COLUMN positions.liquidation_price IS '强平价格';
-COMMENT ON COLUMN positions.leverage IS '杠杆倍数';
-COMMENT ON COLUMN positions.margin IS '保证金金额';
-COMMENT ON COLUMN positions.entry_time IS '开仓时间';
-COMMENT ON COLUMN positions.exit_time IS '平仓时间';
-COMMENT ON COLUMN positions.holding_duration IS '持仓时长';
-COMMENT ON COLUMN positions.unrealized_pnl IS '未实现盈亏';
-COMMENT ON COLUMN positions.realized_pnl IS '已实现盈亏';
-COMMENT ON COLUMN positions.stop_loss IS '止损价';
-COMMENT ON COLUMN positions.take_profit IS '止盈价';
-
-
--- ============================================
--- 3. AI 决策记录表
+-- 2. AI 决策记录表
 -- ============================================
 
 CREATE TABLE ai_decisions (
@@ -205,7 +133,7 @@ COMMENT ON COLUMN ai_decisions.execution_result IS '执行结果（JSON格式）
 
 
 -- ============================================
--- 4. 交易记录表
+-- 3. 交易记录表
 -- ============================================
 
 CREATE TABLE trades (
@@ -242,9 +170,8 @@ CREATE TABLE trades (
     -- 盈亏（仅平仓时）
     pnl NUMERIC(20, 4),
     pnl_pct NUMERIC(10, 4),
-    
+
     -- 关联
-    position_id BIGINT,
     ai_decision_id BIGINT,
     exchange_order_id VARCHAR(100)
 );
@@ -252,7 +179,6 @@ CREATE TABLE trades (
 -- 索引
 CREATE INDEX idx_trade_session ON trades(session_id);
 CREATE INDEX idx_trade_symbol_created ON trades(symbol, created_at);
-CREATE INDEX idx_trade_position_id ON trades(position_id);
 CREATE INDEX idx_trade_created_at ON trades(created_at);
 
 -- 注释
@@ -274,7 +200,6 @@ COMMENT ON COLUMN trades.fee IS '手续费';
 COMMENT ON COLUMN trades.fee_currency IS '手续费币种';
 COMMENT ON COLUMN trades.pnl IS '盈亏金额';
 COMMENT ON COLUMN trades.pnl_pct IS '盈亏百分比';
-COMMENT ON COLUMN trades.position_id IS '关联的持仓ID';
 COMMENT ON COLUMN trades.ai_decision_id IS '关联的AI决策ID';
 COMMENT ON COLUMN trades.exchange_order_id IS '交易所订单ID';
 
@@ -282,21 +207,7 @@ COMMENT ON COLUMN trades.exchange_order_id IS '交易所订单ID';
 -- ============================================
 -- 触发器和函数
 -- ============================================
-
--- 创建更新时间自动更新触发器函数
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ LANGUAGE 'plpgsql';
-
--- 应用触发器到 positions 表
-CREATE TRIGGER update_positions_updated_at 
-    BEFORE UPDATE ON positions
-    FOR EACH ROW 
-    EXECUTE FUNCTION update_updated_at_column();
+-- 注意: positions 表已移除，持仓信息直接从交易所API获取
 
 
 -- ============================================

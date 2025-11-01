@@ -113,66 +113,57 @@ export default function TradingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <div className="max-w-[2000px] mx-auto px-6 py-6">
-        {/* 顶部标题栏 */}
-        <div className="mb-6 flex justify-between items-start">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-1 flex items-center gap-3">
-              <span className="text-4xl">📊</span>
-              CryptoGo 交易监控
-            </h1>
-            <p className="text-gray-500 text-sm">AI自动交易决策与持仓监控</p>
-          </div>
-
-          {/* 会话控制区域 */}
-          {activeSession && (
-            <div className="flex items-center gap-4">
-              <div className="bg-white/90 backdrop-blur-sm rounded-xl p-4 border border-green-200/50 shadow-lg">
-                <div className="flex items-center gap-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-lg shadow-green-500/50"></div>
-                      <span className="text-sm font-semibold text-green-600">会话运行中</span>
-                    </div>
-                    <div className="text-xs text-gray-700 font-medium">
-                      {activeSession.session_name}
-                    </div>
-                    {activeSession.initial_capital && (
-                      <div className="text-xs text-gray-500 mt-1">
-                        初始资金: ${activeSession.initial_capital.toLocaleString()}
-                      </div>
-                    )}
-                    {agentStatus && (
-                      <div className="text-xs mt-2 space-y-1">
-                        <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-pulse"></div>
-                          <span className="text-teal-600 font-medium">Agent 运行中</span>
-                        </div>
-                        <div className="text-gray-500">
-                          循环: {agentStatus.run_count || 0} 次 | 间隔: {agentStatus.config?.decision_interval || '?'}s
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <button
-                      onClick={handleEndSession}
-                      disabled={sessionLoading}
-                      className="px-5 py-2 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-lg text-sm font-semibold transition-all disabled:opacity-50 shadow-md hover:shadow-lg"
-                    >
-                      结束会话
-                    </button>
-                  </div>
-                </div>
+    <div className="min-h-screen bg-[#f8f9fa]">
+      {/* 顶部导航栏 - 参考 Alpha Arena */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-[1920px] mx-auto px-8 py-4">
+          <div className="flex justify-between items-center">
+            {/* Logo 和标题 */}
+            <div className="flex items-center gap-8">
+              <h1 className="text-2xl font-bold text-gray-900">
+                CryptoGo
+                <span className="ml-3 text-sm font-normal text-gray-500">by AI</span>
+              </h1>
+              <div className="flex items-center gap-6 text-sm">
+                <button className="text-gray-900 font-semibold border-b-2 border-gray-900 pb-1">
+                  LIVE
+                </button>
+                <button className="text-gray-500 hover:text-gray-900 transition-colors">
+                  HISTORY
+                </button>
               </div>
             </div>
-          )}
-        </div>
 
-        {/* 会话错误提示 */}
-        {sessionError && (
-          <div className="mb-4 bg-red-50 border border-red-200 rounded-xl p-4 flex justify-between items-center shadow-md">
+            {/* 右侧控制按钮 */}
+            <div className="flex items-center gap-4">
+              {activeSession && (
+                <>
+                  {agentStatus && (
+                    <div className="flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                      <span className="text-sm font-medium text-green-700">
+                        Agent Running · Loop {agentStatus.run_count || 0}
+                      </span>
+                    </div>
+                  )}
+                  <button
+                    onClick={handleEndSession}
+                    disabled={sessionLoading}
+                    className="px-5 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-50"
+                  >
+                    End Session
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 会话错误提示 */}
+      {sessionError && (
+        <div className="max-w-[1920px] mx-auto px-8 pt-4">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex justify-between items-center">
             <span className="text-red-600 font-medium">{sessionError}</span>
             <button
               onClick={clearError}
@@ -181,9 +172,11 @@ export default function TradingPage() {
               ✕
             </button>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* 主要内容区域 - 交易监控 */}
+      {/* 主要内容区域 */}
+      <div className="max-w-[1920px] mx-auto px-8 py-6">
         {activeSession && (
           <TradingMonitor sessionId={activeSession.session_id} />
         )}

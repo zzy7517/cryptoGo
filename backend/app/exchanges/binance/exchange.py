@@ -48,6 +48,7 @@ class BinanceExchange(AbstractExchange):
         self.proxies = proxies
         self.client: Optional[BinanceFuturesClient] = None
         self.market_data: Optional[BinanceMarketData] = None
+        self._symbol_filters: Dict[str, Dict[str, Any]] = {}  # 缓存交易对过滤器
         self.initialize()
     
     def initialize(self) -> bool:
@@ -70,6 +71,9 @@ class BinanceExchange(AbstractExchange):
             # 创建市场数据获取器（使用同一个client）
             self.market_data = BinanceMarketData(client=self.client)
             
+            # 注意：系统使用单向持仓模式（One-way Mode）
+            logger.info("系统使用单向持仓模式（One-way Mode），positionSide=BOTH")
+            
             # 测试连接
             server_time = self.client.get_server_time()
             logger.info(
@@ -84,6 +88,101 @@ class BinanceExchange(AbstractExchange):
             error_msg = f"初始化币安交易所失败: {str(e)}"
             logger.exception(error_msg)
             raise ConfigurationException(error_msg) from e
+    
+    def _get_symbol_filters(self, symbol: str) -> Dict[str, Any]:
+        """
+        获取交易对的过滤器（精度、最小/最大数量等）
+        
+        Args:
+            symbol: 交易对（如 BTCUSDT）
+            
+        Returns:
+            包含 LOT_SIZE 和 PRICE_FILTER 等过滤器的字典
+        """
+        # 标准化交易对格式
+        symbol = symbol.replace('/', '').replace(':USDT', '').replace(':usdt', '')
+        
+        # 如果已缓存，直接返回
+        if symbol in self._symbol_filters:
+            return self._symbol_filters[symbol]
+        
+        try:
+            # 获取交易所信息
+            exchange_info = self.client.get_exchange_info()
+            
+            # 查找对应的交易对
+            for symbol_info in exchange_info.get('symbols', []):
+                if symbol_info['symbol'] == symbol:
+                    filters = {}
+                    for f in symbol_info.get('filters', []):
+                        filters[f['filterType']] = f
+                    
+                    # 缓存结果
+                    self._symbol_filters[symbol] = filters
+                    return filters
+            
+            logger.warning(f"未找到交易对 {symbol} 的过滤器信息")
+            return {}
+            
+        except Exception as e:
+            logger.error(f"获取交易对过滤器失败: {e}", symbol=symbol)
+            return {}
+    
+    def _format_quantity(self, symbol: str, quantity: float) -> float:
+        """
+        根据交易对的精度要求格式化数量
+        
+        Args:
+            symbol: 交易对（如 BTCUSDT）
+            quantity: 原始数量
+            
+        Returns:
+            格式化后的数量
+        """
+        filters = self._get_symbol_filters(symbol)
+        
+        if not filters:
+            # 如果没有过滤器信息，使用默认精度（3位小数）
+            logger.warning(f"未获取到 {symbol} 的过滤器信息，使用默认精度")
+            return round(quantity, 3)
+        
+        # 获取 LOT_SIZE 过滤器
+        lot_size = filters.get('LOT_SIZE', {})
+        if lot_size:
+            step_size = float(lot_size.get('stepSize', 0.001))
+            min_qty = float(lot_size.get('minQty', 0))
+            max_qty = float(lot_size.get('maxQty', 1000000))
+            
+            # 计算步长的小数位数
+            step_str = f"{step_size:.10f}".rstrip('0')
+            if '.' in step_str:
+                precision = len(step_str.split('.')[1])
+            else:
+                precision = 0
+            
+            # 按步长向下取整
+            formatted_qty = (quantity // step_size) * step_size
+            
+            # 四舍五入到正确的小数位数
+            formatted_qty = round(formatted_qty, precision)
+            
+            # 确保在最小最大范围内
+            if formatted_qty < min_qty:
+                formatted_qty = min_qty
+            elif formatted_qty > max_qty:
+                formatted_qty = max_qty
+            
+            logger.debug(
+                f"数量格式化: {quantity:.10f} -> {formatted_qty:.10f}",
+                symbol=symbol,
+                step_size=step_size,
+                precision=precision
+            )
+            
+            return formatted_qty
+        
+        # 如果没有LOT_SIZE，返回默认精度
+        return round(quantity, 3)
     
     
     # ==================== 账户相关 ====================
@@ -283,12 +382,26 @@ class BinanceExchange(AbstractExchange):
             订单结果
         """
         try:
+            # 格式化数量以符合Binance精度要求
+            formatted_quantity = self._format_quantity(symbol, quantity)
+
+            # 单向持仓模式：始终使用 BOTH
+            pos_side = 'BOTH'
+
+            logger.info(
+                f"创建市价单: {symbol}",
+                original_qty=quantity,
+                formatted_qty=formatted_quantity,
+                side=side.value,
+                position_side=pos_side
+            )
+
             order = self.client.create_order(
                 symbol=symbol,
                 side=side.value.upper(),
                 order_type='MARKET',
-                quantity=quantity,
-                position_side=position_side.value.upper() if position_side else 'BOTH',
+                quantity=formatted_quantity,
+                position_side=pos_side,
                 reduce_only=reduce_only
             )
             
@@ -334,13 +447,19 @@ class BinanceExchange(AbstractExchange):
             订单结果
         """
         try:
+            # 格式化数量以符合Binance精度要求
+            formatted_quantity = self._format_quantity(symbol, quantity)
+
+            # 单向持仓模式：始终使用 BOTH
+            pos_side = 'BOTH'
+
             order = self.client.create_order(
                 symbol=symbol,
                 side=side.value.upper(),
                 order_type='LIMIT',
-                quantity=quantity,
+                quantity=formatted_quantity,
                 price=price,
-                position_side=position_side.value.upper() if position_side else 'BOTH',
+                position_side=pos_side,
                 time_in_force='GTC',
                 reduce_only=reduce_only
             )
@@ -464,16 +583,22 @@ class BinanceExchange(AbstractExchange):
                     return OrderResult(success=False, error="未找到持仓")
                 quantity = position['quantity']
             
+            # 格式化数量以符合Binance精度要求
+            formatted_quantity = self._format_quantity(symbol, quantity)
+            
             # 止损单方向与持仓方向相反
             side = OrderSide.SELL if position_side == PositionSide.LONG else OrderSide.BUY
-            
+
+            # 单向持仓模式：始终使用 BOTH
+            pos_side = 'BOTH'
+
             order = self.client.create_order(
                 symbol=symbol,
                 side=side.value.upper(),
                 order_type='STOP_MARKET',
-                quantity=quantity,
+                quantity=formatted_quantity,
                 stop_price=stop_price,
-                position_side=position_side.value.upper(),
+                position_side=pos_side,
                 reduce_only=True
             )
             
@@ -520,16 +645,22 @@ class BinanceExchange(AbstractExchange):
                     return OrderResult(success=False, error="未找到持仓")
                 quantity = position['quantity']
             
+            # 格式化数量以符合Binance精度要求
+            formatted_quantity = self._format_quantity(symbol, quantity)
+            
             # 止盈单方向与持仓方向相反
             side = OrderSide.SELL if position_side == PositionSide.LONG else OrderSide.BUY
-            
+
+            # 单向持仓模式：始终使用 BOTH
+            pos_side = 'BOTH'
+
             order = self.client.create_order(
                 symbol=symbol,
                 side=side.value.upper(),
                 order_type='TAKE_PROFIT_MARKET',
-                quantity=quantity,
+                quantity=formatted_quantity,
                 stop_price=take_profit_price,
-                position_side=position_side.value.upper(),
+                position_side=pos_side,
                 reduce_only=True
             )
             
@@ -576,12 +707,13 @@ class BinanceExchange(AbstractExchange):
             
             # 平仓方向与持仓方向相反
             side = OrderSide.SELL if position_side == PositionSide.LONG else OrderSide.BUY
-            
+
+            # 单向持仓模式下，直接使用 reduce_only=True 即可平仓
             return self.create_market_order(
                 symbol=symbol,
                 side=side,
                 quantity=quantity,
-                position_side=position_side,
+                position_side=None,  # 单向持仓模式，函数内会自动设为 BOTH
                 reduce_only=True
             )
             

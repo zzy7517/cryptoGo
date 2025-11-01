@@ -55,18 +55,6 @@ from .trade import (
     TradeStatistics,
 )
 
-# Position schemas
-from .position import (
-    PositionBase,
-    PositionDetail,
-    CreatePositionRequest,
-    UpdatePositionRequest,
-    ClosePositionRequest,
-    PositionListResponse,
-    PositionDetailResponse,
-    PositionSummary,
-)
-
 # AI Decision schemas
 from .ai_decision import (
     AIDecisionBase,
@@ -119,15 +107,6 @@ __all__ = [
     "TradeListResponse",
     "TradeDetailResponse",
     "TradeStatistics",
-    # Position
-    "PositionBase",
-    "PositionDetail",
-    "CreatePositionRequest",
-    "UpdatePositionRequest",
-    "ClosePositionRequest",
-    "PositionListResponse",
-    "PositionDetailResponse",
-    "PositionSummary",
     # AI Decision
     "AIDecisionBase",
     "AIDecisionDetail",
