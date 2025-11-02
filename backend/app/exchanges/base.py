@@ -294,18 +294,22 @@ class AbstractExchange(ABC):
             symbol: 交易对
             quantity: 数量
             leverage: 杠杆倍数
-            stop_loss_price: 止损价格
-            take_profit_price: 止盈价格
+            stop_loss_price: 止损价格（仅供AI参考，不创建委托单）
+            take_profit_price: 止盈价格（仅供AI参考，不创建委托单）
             
         Returns:
             订单结果
+            
+        注意：
+            stop_loss_price 和 take_profit_price 仅作为AI决策的参考值，
+            不会在交易所创建委托单。真正的止损止盈由AI在每个周期自主决定。
         """
         try:
             # 设置杠杆
             if leverage:
                 self.set_leverage(symbol, leverage)
             
-            # 开多仓（买入）
+            # 开多仓（买入）- 仅使用市价单
             result = self.create_market_order(
                 symbol=symbol,
                 side=OrderSide.BUY,
@@ -316,23 +320,16 @@ class AbstractExchange(ABC):
             if not result.success:
                 return result
             
-            # 设置止损
-            if stop_loss_price:
-                self.set_stop_loss(
-                    symbol=symbol,
-                    position_side=PositionSide.LONG,
-                    stop_price=stop_loss_price,
-                    quantity=quantity
-                )
-            
-            # 设置止盈
-            if take_profit_price:
-                self.set_take_profit(
-                    symbol=symbol,
-                    position_side=PositionSide.LONG,
-                    take_profit_price=take_profit_price,
-                    quantity=quantity
-                )
+            # AI盯盘模式：不创建止损止盈委托单
+            # AI会在每个决策周期基于最新数据自主决定是否平仓
+            logger.info(
+                f"✅ 开多仓成功 (AI盯盘模式)",
+                symbol=symbol,
+                quantity=quantity,
+                leverage=leverage,
+                stop_loss_reference=stop_loss_price,
+                take_profit_reference=take_profit_price
+            )
             
             return result
             
@@ -355,18 +352,22 @@ class AbstractExchange(ABC):
             symbol: 交易对
             quantity: 数量
             leverage: 杠杆倍数
-            stop_loss_price: 止损价格
-            take_profit_price: 止盈价格
+            stop_loss_price: 止损价格（仅供AI参考，不创建委托单）
+            take_profit_price: 止盈价格（仅供AI参考，不创建委托单）
             
         Returns:
             订单结果
+            
+        注意：
+            stop_loss_price 和 take_profit_price 仅作为AI决策的参考值，
+            不会在交易所创建委托单。真正的止损止盈由AI在每个周期自主决定。
         """
         try:
             # 设置杠杆
             if leverage:
                 self.set_leverage(symbol, leverage)
             
-            # 开空仓（卖出）
+            # 开空仓（卖出）- 仅使用市价单
             result = self.create_market_order(
                 symbol=symbol,
                 side=OrderSide.SELL,
@@ -377,23 +378,16 @@ class AbstractExchange(ABC):
             if not result.success:
                 return result
             
-            # 设置止损
-            if stop_loss_price:
-                self.set_stop_loss(
-                    symbol=symbol,
-                    position_side=PositionSide.SHORT,
-                    stop_price=stop_loss_price,
-                    quantity=quantity
-                )
-            
-            # 设置止盈
-            if take_profit_price:
-                self.set_take_profit(
-                    symbol=symbol,
-                    position_side=PositionSide.SHORT,
-                    take_profit_price=take_profit_price,
-                    quantity=quantity
-                )
+            # AI盯盘模式：不创建止损止盈委托单
+            # AI会在每个决策周期基于最新数据自主决定是否平仓
+            logger.info(
+                f"✅ 开空仓成功 (AI盯盘模式)",
+                symbol=symbol,
+                quantity=quantity,
+                leverage=leverage,
+                stop_loss_reference=stop_loss_price,
+                take_profit_reference=take_profit_price
+            )
             
             return result
             

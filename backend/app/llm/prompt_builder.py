@@ -43,36 +43,39 @@ class PromptDataCollector:
             ticker = self.exchange.get_ticker(symbol)
             current_price = ticker.get('last') or 0
             
-            # 优先从ticker获取bid/ask，如果缺失则从订单簿获取
-            bid_price = ticker.get('bid')
-            ask_price = ticker.get('ask')
-            
-            # 如果ticker中没有bid/ask，尝试从订单簿获取（更准确）
-            if bid_price is None or ask_price is None:
-                try:
-                    orderbook = self.exchange.get_order_book(symbol, limit=1)
-                    if bid_price is None and orderbook.get('bid'):
-                        bid_price = orderbook['bid']
-                    if ask_price is None and orderbook.get('ask'):
-                        ask_price = orderbook['ask']
-                    logger.debug(f"从订单簿获取到bid/ask: {bid_price}/{ask_price}")
-                except Exception as e:
-                    logger.debug(f"订单簿获取失败，使用current_price作为fallback: {e}")
-            
-            # 最终fallback：使用当前价格
-            if bid_price is None:
-                bid_price = current_price
-            if ask_price is None:
-                ask_price = current_price
-            
-            # 计算中间价
-            mid_price = (bid_price + ask_price) / 2 if (bid_price and ask_price) else current_price
+            mid_price = current_price  # 将在后续从K线数据中更新
             
             # 获取3分钟K线数据（40根用于计算，展示最后10根）
             klines_3m = self.exchange.get_klines(symbol, interval='3m', limit=40)
             
             # 获取4小时K线数据（60根用于计算长期指标）
             klines_4h = self.exchange.get_klines(symbol, interval='4h', limit=60)
+            
+            # 🆕 计算价格变化百分比
+            price_change_1h = 0.0
+            price_change_4h = 0.0
+            
+            # 使用K线数据计算当前价格（更准确）
+            if klines_3m:
+                current_price_from_kline = klines_3m[-1]['close']
+                # 🔄 更新mid_price为K线的close价格
+                mid_price = current_price_from_kline
+                current_price = current_price_from_kline
+                
+                # 1小时价格变化：20个3分钟K线前（60分钟）
+                if len(klines_3m) >= 21:
+                    price_1h_ago = klines_3m[-21]['close']
+                    if price_1h_ago > 0:
+                        price_change_1h = ((current_price_from_kline - price_1h_ago) / price_1h_ago) * 100
+                        logger.debug(f"{coin_name} 1h变化: {price_change_1h:+.2f}% ({price_1h_ago:.2f} -> {current_price_from_kline:.2f})")
+            
+            # 4小时价格变化：1个4小时K线前
+            if klines_4h and len(klines_4h) >= 2:
+                current_price_from_kline = klines_4h[-1]['close']
+                price_4h_ago = klines_4h[-2]['close']
+                if price_4h_ago > 0:
+                    price_change_4h = ((current_price_from_kline - price_4h_ago) / price_4h_ago) * 100
+                    logger.debug(f"{coin_name} 4h变化: {price_change_4h:+.2f}% ({price_4h_ago:.2f} -> {current_price_from_kline:.2f})")
             
             # 计算3分钟指标（传入symbol以获取实时价格）
             intraday_data = self._calculate_intraday_indicators(klines_3m, count=10, symbol=symbol)
@@ -96,6 +99,8 @@ class PromptDataCollector:
                 'symbol': coin_name,
                 'current_price': current_price,
                 'mid_price': mid_price,
+                'price_change_1h': price_change_1h,  # 🆕
+                'price_change_4h': price_change_4h,  # 🆕
                 'intraday': intraday_data,
                 'longterm': longterm_data,
                 'funding_rate': funding_rate,
@@ -178,8 +183,7 @@ class PromptDataCollector:
             latest_kline = klines[-1]
             current_volume = latest_kline.get('volume', 0)
             
-            # 计算平均成交量（最近20根K线）
-            volumes = [k.get('volume', 0) for k in klines[-20:]]
+            volumes = [k.get('volume', 0) for k in klines]
             avg_volume = np.mean(volumes) if volumes else 0
             
             result = {
@@ -220,7 +224,7 @@ class PromptDataCollector:
     
     async def collect_account_data(self) -> Dict[str, Any]:
         """
-        收集账户数据，包括Sharpe Ratio
+        收集账户数据，包括Sharpe Ratio、保证金使用率等
         
         Returns:
             账户数据
@@ -243,12 +247,59 @@ class PromptDataCollector:
             # 计算Sharpe Ratio
             sharpe_ratio = await self._calculate_sharpe_ratio(self.session_id)
             
-            return {
-                'available_cash': current_capital,
-                'account_value': current_capital,
-                'total_return_pct': round(total_return_pct, 2),
-                'sharpe_ratio': round(sharpe_ratio, 3)
-            }
+            # 🆕 从交易所获取实时账户信息
+            try:
+                account_info = self.exchange.get_account_info()
+                total_equity = float(account_info.get('totalWalletBalance', current_capital))
+                available_balance = float(account_info.get('availableBalance', current_capital))
+                
+                # 获取持仓信息以计算保证金
+                positions = self.exchange.get_positions()
+                
+                # 计算总保证金使用量
+                # 保证金 = 仓位价值 / 杠杆
+                total_margin_used = 0.0
+                for pos in positions:
+                    notional = abs(float(pos.get('notional', 0)))  # 仓位价值
+                    leverage = float(pos.get('leverage', 1))
+                    if leverage > 0:
+                        margin = notional / leverage
+                        total_margin_used += margin
+                
+                # 计算保证金使用率
+                margin_used_pct = (total_margin_used / total_equity * 100) if total_equity > 0 else 0
+                
+                # 计算余额占比
+                balance_pct = (available_balance / total_equity * 100) if total_equity > 0 else 0
+                
+                # 持仓数量
+                position_count = len(positions)
+                
+                logger.info(f"💰 账户: 净值{total_equity:.2f}, 可用{available_balance:.2f}({balance_pct:.1f}%), "
+                           f"保证金{margin_used_pct:.1f}%, 持仓{position_count}个")
+                
+                return {
+                    'available_cash': available_balance,
+                    'account_value': total_equity,
+                    'total_return_pct': round(total_return_pct, 2),
+                    'sharpe_ratio': round(sharpe_ratio, 3),
+                    'balance_pct': round(balance_pct, 1),  # 🆕
+                    'margin_used_pct': round(margin_used_pct, 1),  # 🆕
+                    'position_count': position_count  # 🆕
+                }
+                
+            except Exception as e:
+                logger.warning(f"获取交易所账户信息失败，使用数据库数据: {e}")
+                # Fallback到数据库数据
+                return {
+                    'available_cash': current_capital,
+                    'account_value': current_capital,
+                    'total_return_pct': round(total_return_pct, 2),
+                    'sharpe_ratio': round(sharpe_ratio, 3),
+                    'balance_pct': 100.0,
+                    'margin_used_pct': 0.0,
+                    'position_count': 0
+                }
             
         finally:
             db.close()
@@ -303,7 +354,7 @@ class PromptDataCollector:
     
     async def collect_positions_detail(self) -> List[Dict[str, Any]]:
         """
-        从交易所API收集详细的持仓信息（包括清算价格等）
+        从交易所API收集详细的持仓信息（包括清算价格、订单ID等）
 
         Returns:
             持仓列表
@@ -311,6 +362,9 @@ class PromptDataCollector:
         try:
             # 直接从交易所API获取实时持仓
             positions = self.exchange.get_positions()
+            
+            # 获取所有未成交订单
+            open_orders = self.exchange.get_open_orders()
 
             position_list = []
             for p in positions:
@@ -329,24 +383,75 @@ class PromptDataCollector:
                 leverage = int(p.get('leverage', 1))
                 side = p.get('side', 'long')
                 notional = float(p.get('notional', 0))
+                update_time = p.get('updateTime', 0)  # 获取更新时间
+                
+                # 🆕 计算持仓时长
+                holding_duration = ""
+                if update_time > 0:
+                    from datetime import datetime
+                    # updateTime 是毫秒时间戳
+                    current_time_ms = int(datetime.now().timestamp() * 1000)
+                    duration_ms = current_time_ms - update_time
+                    duration_minutes = duration_ms // (1000 * 60)
+                    
+                    if duration_minutes < 60:
+                        holding_duration = f"{duration_minutes}分钟"
+                    else:
+                        duration_hours = duration_minutes // 60
+                        duration_min_remainder = duration_minutes % 60
+                        holding_duration = f"{duration_hours}小时{duration_min_remainder}分钟"
+                    
+                    logger.debug(f"{coin_symbol} 持仓时长: {holding_duration}")
+                
+                # 从未成交订单中查找止盈止损订单
+                sl_oid = -1
+                tp_oid = -1
+                stop_loss_price = None
+                take_profit_price = None
+                
+                # 匹配订单：根据持仓方向和订单类型
+                for order in open_orders:
+                    if order.get('symbol') != symbol:
+                        continue
+                    
+                    order_type = order.get('type', '')
+                    order_side = order.get('side', '')
+                    
+                    # 对于多头持仓，止盈止损都是卖出
+                    # 对于空头持仓，止盈止损都是买入
+                    expected_side = 'SELL' if side == 'long' else 'BUY'
+                    
+                    if order_side == expected_side:
+                        if 'STOP' in order_type and 'TAKE_PROFIT' not in order_type:
+                            # 止损订单
+                            sl_oid = int(order.get('orderId', -1))
+                            stop_loss_price = float(order.get('stopPrice', 0)) or float(order.get('price', 0))
+                        elif 'TAKE_PROFIT' in order_type:
+                            # 止盈订单
+                            tp_oid = int(order.get('orderId', -1))
+                            take_profit_price = float(order.get('stopPrice', 0)) or float(order.get('price', 0))
 
                 position_detail = {
                     'symbol': coin_symbol,
-                    'quantity': contracts,
+                    'quantity': contracts if side == 'long' else -contracts,  # 空头为负数
                     'entry_price': entry_price,
                     'current_price': mark_price,
                     'liquidation_price': round(liquidation_price, 2),
                     'unrealized_pnl': round(unrealized_pnl, 2),
                     'leverage': leverage,
-                    'side': side,
+                    'holding_duration': holding_duration,  # 🆕
                     'exit_plan': {
-                        'profit_target': None,  # 交易所API不返回止盈止损信息
-                        'stop_loss': None,
-                        'invalidation_condition': 'N/A'
+                        'profit_target': take_profit_price,
+                        'stop_loss': stop_loss_price,
+                        'invalidation_condition': 'N/A'  # 可以根据策略设置
                     },
                     'confidence': 0.65,  # 默认值
                     'risk_usd': abs(unrealized_pnl) if unrealized_pnl < 0 else 0,
-                    'notional_usd': notional
+                    'sl_oid': sl_oid,
+                    'tp_oid': tp_oid,
+                    'wait_for_fill': False,  # 默认值
+                    'entry_oid': -1,  # 开仓订单已成交，无法从open_orders获取
+                    'notional_usd': abs(notional)
                 }
 
                 position_list.append(position_detail)
@@ -392,6 +497,16 @@ class PromptBuilder:
             now = datetime.now()
             minutes_since_start = int((now - start_time).total_seconds() / 60)
             
+            # 🆕 单独收集BTC数据用于市场概览
+            btc_symbol = 'BTC/USDT:USDT'
+            btc_overview = ""
+            btc_data = None
+            
+            # 如果BTC不在symbols中，单独获取
+            if btc_symbol not in symbols:
+                logger.info("📊 获取BTC市场概览...")
+                btc_data = await self.collector.collect_coin_data(btc_symbol)
+            
             # 收集所有币种数据
             logger.info("📊 收集币种数据...")
             coins_data = []
@@ -399,6 +514,23 @@ class PromptBuilder:
                 coin_data = await self.collector.collect_coin_data(symbol)
                 if coin_data:
                     coins_data.append(coin_data)
+                    # 如果BTC在symbols中，记录下来用于概览
+                    if symbol == btc_symbol:
+                        btc_data = coin_data
+            
+            # 🆕 格式化BTC概览
+            if btc_data:
+                intraday = btc_data.get('intraday', {})
+                btc_overview = (
+                    f"**BTC**: {btc_data['current_price']:.2f} "
+                    f"(1h: {btc_data.get('price_change_1h', 0):+.2f}%, "
+                    f"4h: {btc_data.get('price_change_4h', 0):+.2f}%) | "
+                    f"MACD: {intraday.get('current_macd', 0):.4f} | "
+                    f"RSI: {intraday.get('current_rsi7', 0):.2f}\n\n"
+                )
+                logger.info(f"✅ BTC概览: 价格 {btc_data['current_price']:.2f}, "
+                           f"1h {btc_data.get('price_change_1h', 0):+.2f}%, "
+                           f"4h {btc_data.get('price_change_4h', 0):+.2f}%")
             
             # 格式化币种数据
             all_coins_text = self._format_all_coins_data(coins_data)
@@ -417,12 +549,16 @@ class PromptBuilder:
                 minutes_since_start=minutes_since_start,
                 current_time=now.strftime("%Y-%m-%d %H:%M:%S.%f"),
                 call_count=call_count,
+                btc_overview=btc_overview,  # 🆕
                 all_coins_data=all_coins_text,
                 total_return_pct=account_data.get('total_return_pct', 0),
                 available_cash=account_data.get('available_cash', 0),
                 account_value=account_data.get('account_value', 0),
                 positions_detail=positions_text,
-                sharpe_ratio=account_data.get('sharpe_ratio', 0)
+                sharpe_ratio=account_data.get('sharpe_ratio', 0),
+                balance_pct=account_data.get('balance_pct', 0),  # 🆕
+                margin_used_pct=account_data.get('margin_used_pct', 0),  # 🆕
+                position_count=account_data.get('position_count', 0)  # 🆕
             )
             
             logger.info("✅ 提示词构建完成")
@@ -441,8 +577,11 @@ class PromptBuilder:
             intraday = coin.get('intraday', {})
             longterm = coin.get('longterm', {})
             
-            lines.append(f"ALL {symbol} DATA")
-            lines.append(f"current_price = {coin['current_price']}, " +
+            lines.append(f"### {symbol}")
+            # 🆕 添加价格变化百分比
+            lines.append(f"current_price = {coin['current_price']:.2f}, " +
+                        f"1h_change = {coin.get('price_change_1h', 0):+.2f}%, " +
+                        f"4h_change = {coin.get('price_change_4h', 0):+.2f}%, " +
                         f"current_ema20 = {intraday.get('current_ema20', 0):.3f}, " +
                         f"current_macd = {intraday.get('current_macd', 0):.3f}, " +
                         f"current_rsi (7 period) = {intraday.get('current_rsi7', 0):.3f}")
@@ -461,14 +600,19 @@ class PromptBuilder:
             lines.append("")
             
             # Intraday数据（3分钟）
-            lines.append("Intraday series (by minute, oldest → latest):")
+            lines.append("Intraday series (3‑minute intervals, oldest → latest):")
             lines.append("")
             
             if intraday:
-                # Mid prices
+                # Mid prices - BTC和ETH不加前缀，其他币种加前缀
+                # Mid prices 保持原始精度，不固定小数位
                 mid_prices = intraday.get('mid_prices', [])
                 if mid_prices:
-                    lines.append(f"Mid prices: {self._format_array(mid_prices)}")
+                    formatted_mid_prices = self._format_mid_prices(mid_prices)
+                    if symbol in ['BTC', 'ETH']:
+                        lines.append(f"Mid prices: {formatted_mid_prices}")
+                    else:
+                        lines.append(f"{symbol} mid prices: {formatted_mid_prices}")
                     lines.append("")
                 
                 # EMA 20
@@ -530,10 +674,10 @@ class PromptBuilder:
         if not positions:
             return "No positions"
         
-        # 将每个持仓格式化为类似example的字符串
+        # 将每个持仓格式化为类似example的字符串（保持单引号）
         formatted_positions = []
         for pos in positions:
-            pos_str = str(pos).replace("'", '"')  # 转换为类似JSON的格式
+            pos_str = str(pos)  # 保持Python dict的原始格式（使用单引号）
             formatted_positions.append(pos_str)
         
         return " ".join(formatted_positions)
@@ -544,6 +688,15 @@ class PromptBuilder:
             return "[]"
         
         formatted_values = [f"{v:.{precision}f}" if isinstance(v, (int, float)) else str(v) for v in arr]
+        return "[" + ", ".join(formatted_values) + "]"
+    
+    def _format_mid_prices(self, arr: List[float]) -> str:
+        """格式化 Mid Prices 数组，保持原始精度"""
+        if not arr:
+            return "[]"
+        
+        # 保持原始精度，使用 Python 的默认格式化
+        formatted_values = [str(float(v)) for v in arr]
         return "[" + ", ".join(formatted_values) + "]"
 
 

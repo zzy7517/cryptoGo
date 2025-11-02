@@ -319,6 +319,23 @@ class BinanceExchange(AbstractExchange):
             logger.error(f"获取持仓信息失败: {str(e)}", symbol=symbol)
             raise
     
+    def get_open_orders(self, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        获取所有未成交订单
+        
+        Args:
+            symbol: 交易对（可选），不传则返回所有
+            
+        Returns:
+            未成交订单列表
+        """
+        try:
+            orders = self.client.get_open_orders(symbol)
+            return orders
+        except Exception as e:
+            logger.error(f"获取未成交订单失败: {str(e)}")
+            raise
+    
     # ==================== 交易相关 ====================
     
     def create_market_order(
