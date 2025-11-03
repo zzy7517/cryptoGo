@@ -26,7 +26,7 @@
 
 ### 后端
 - **框架**：FastAPI + Uvicorn
-- **数据库**：PostgreSQL (Supabase)
+- **数据库**：SQLite（默认）/ PostgreSQL（可选）
 - **交易所集成**：币安
 - **LLM**：OpenAI SDK 
 
@@ -46,9 +46,10 @@
 
 - Python 3.11+
 - Node.js 18+
-- PostgreSQL (推荐使用 Supabase)
 - 币安账户 API Key (测试网或主网)
 - DeepSeek API Key
+
+> 💡 **零配置数据库**：默认使用 SQLite 文件数据库，无需安装 PostgreSQL！
 
 ### 后端设置
 
@@ -72,8 +73,9 @@
 
    编辑 `.env` 文件，配置以下关键参数：
    ```env
-   # 数据库配置
-   DATABASE_URL=postgresql://user:password@host:port/dbname
+   # 数据库配置（可选，默认使用 SQLite）
+   # DATABASE_URL=sqlite:///./data/trading.db  # 默认值，无需配置
+   # DATABASE_URL=postgresql://user:password@host:port/dbname  # 如需使用 PostgreSQL
 
    # 币安 API
    BINANCE_API_KEY=your_api_key
@@ -113,6 +115,33 @@
 
 - **前端界面**: http://localhost:3000
 
+## 💾 数据库说明
+
+### 为什么选择 SQLite？
+
+本项目默认使用 **SQLite** 作为数据库，原因如下：
+
+- ✅ **零配置**：无需安装数据库服务器，开箱即用
+- ✅ **简单部署**：数据库文件随项目一起，方便备份和迁移
+- ✅ **性能足够**：对于个人交易机器人的数据量完全够用
+- ✅ **完全兼容**：SQLAlchemy ORM 完美支持，代码无差异
+- ✅ **成本更低**：无需外部数据库服务，降低运维成本
+
+### 数据库文件位置
+
+- **SQLite 数据库**：`backend/data/trading.db`
+- **Schema 文件**：`backend/schema.sqlite.sql`（参考用）
+
+### 切换到 PostgreSQL（可选）
+
+如果需要使用 PostgreSQL（适合多用户或高并发场景），只需修改环境变量：
+
+```env
+DATABASE_URL=postgresql://user:password@host:port/dbname
+```
+
+代码无需任何修改！
+
 ## 📁 项目结构
 
 ```
@@ -126,6 +155,7 @@ cryptoGo/
 │   │   ├── repositories/   # 数据访问层
 │   │   ├── schemas/        # Pydantic 模型
 │   │   └── services/       # 业务逻辑层
+│   ├── data/               # SQLite 数据库文件目录
 │   ├── requirements.txt
 │   └── .env.example
 ├── frontend/               # 前端应用
