@@ -39,6 +39,11 @@ class AIDecision(Base):
     executed = Column(Boolean, default=False, comment="是否已执行")
     execution_result = Column(JSONB, comment="执行结果（JSON格式）")
     
+    # 账户信息（用于资产变化追踪）
+    account_balance = Column(Numeric(20, 4), comment="决策时的账户总余额")
+    unrealized_pnl = Column(Numeric(20, 4), comment="决策时的浮动盈亏（未实现盈亏）")
+    total_asset = Column(Numeric(20, 4), comment="决策时的总资产（余额 + 浮动盈亏）")
+    
     # 约束和索引
     __table_args__ = (
         CheckConstraint("decision_type IN ('buy', 'sell', 'hold', 'rebalance', 'close')", name='check_decision_type'),

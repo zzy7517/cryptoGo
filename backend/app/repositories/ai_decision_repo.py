@@ -33,7 +33,10 @@ class AIDecisionRepository:
         ai_response: str,
         reasoning: Optional[str] = None,
         suggested_actions: Optional[List[Dict]] = None,
-        executed: bool = False
+        executed: bool = False,
+        account_balance: Optional[float] = None,
+        unrealized_pnl: Optional[float] = None,
+        total_asset: Optional[float] = None
     ) -> AIDecision:
         try:
             decision = AIDecision(
@@ -45,7 +48,10 @@ class AIDecisionRepository:
                 ai_response=ai_response,
                 reasoning=reasoning,
                 suggested_actions=suggested_actions or [],
-                executed=executed
+                executed=executed,
+                account_balance=account_balance,
+                unrealized_pnl=unrealized_pnl,
+                total_asset=total_asset
             )
             self.db.add(decision)
             self.db.commit()

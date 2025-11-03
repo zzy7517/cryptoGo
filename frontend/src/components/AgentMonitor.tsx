@@ -64,10 +64,10 @@ export default function AgentMonitor({ sessionId }: AgentMonitorProps) {
   }
 
   return (
-    <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-      <h3 className="text-sm font-medium text-gray-700 mb-4">Agent 监控（定时循环）</h3>
-      
-      <div className="space-y-3">
+    <div className="bg-white rounded-lg p-5 shadow-sm border border-gray-200 h-full">
+      <h3 className="text-sm font-semibold text-gray-900 mb-3">Agent 监控（定时循环）</h3>
+
+      <div className="space-y-2.5">
         {/* 状态指示器 */}
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${

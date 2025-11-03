@@ -5,17 +5,21 @@
  */
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { sessionApi, agentApi, accountApi } from '@/lib/api';
 import AgentMonitor from './AgentMonitor';
 import ChatPanel from './ChatPanel';
+import AssetChart from './AssetChart';
 
 interface TradingMonitorProps {
   sessionId: number;
 }
 
 export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
+  // 聊天面板显示/隐藏状态
+  const [isChatPanelVisible, setIsChatPanelVisible] = useState(true);
+
   // 获取会话详情
   const { data: sessionDetails, isLoading, refetch } = useQuery({
     queryKey: ['sessionDetails', sessionId],
@@ -30,9 +34,18 @@ export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
     refetchInterval: 15000, // 每15秒刷新
   });
 
+  // 获取 Agent 状态
+  const { data: agentStatusData } = useQuery({
+    queryKey: ['agentStatus', sessionId],
+    queryFn: () => agentApi.getAgentStatus(sessionId),
+    refetchInterval: 5000, // 每5秒刷新
+    retry: false, // Agent 未运行时不重试
+  });
+
   const details = sessionDetails?.data;
   const exchangeData = accountData?.data;
   const holdTimes = details?.hold_times;
+  const agentStatus = agentStatusData?.data;
 
   const formatNumber = (num: number | null | undefined, decimals: number = 2): string => {
     if (num === null || num === undefined) return '--';
@@ -79,6 +92,78 @@ export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
     <div className="flex gap-6 h-[calc(100vh-200px)]">
       {/* 左侧主内容区 */}
       <div className="flex-1 space-y-4 overflow-y-auto pr-2">
+        {/* Agent 状态通知栏 */}
+        {agentStatus && (
+          <div className="bg-gradient-to-r from-teal-50 to-cyan-50 border border-teal-200 rounded-lg px-4 py-2.5 flex items-center justify-between text-sm">
+            <div className="flex items-center gap-6">
+              {/* 运行状态 */}
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${
+                  agentStatus.status === 'running' ? 'bg-green-500 animate-pulse' :
+                  agentStatus.status === 'stopping' ? 'bg-yellow-500' :
+                  agentStatus.status === 'starting' ? 'bg-blue-500 animate-pulse' :
+                  'bg-gray-500'
+                }`}></div>
+                <span className="font-semibold text-gray-800">
+                  {agentStatus.status === 'running' ? '运行中' :
+                   agentStatus.status === 'stopping' ? '停止中' :
+                   agentStatus.status === 'starting' ? '启动中' :
+                   agentStatus.status === 'crashed' ? '已崩溃' :
+                   agentStatus.status}
+                </span>
+              </div>
+
+              {/* 循环次数 */}
+              <div className="flex items-center gap-1.5 text-gray-700">
+                <span className="text-gray-600">循环:</span>
+                <span className="font-bold">{agentStatus.run_count || 0}</span>
+              </div>
+
+              {/* 决策间隔 */}
+              {agentStatus.config?.decision_interval && (
+                <div className="flex items-center gap-1.5 text-gray-700">
+                  <span className="text-gray-600">间隔:</span>
+                  <span className="font-bold">{agentStatus.config.decision_interval}秒</span>
+                </div>
+              )}
+
+              {/* 监控币种 */}
+              {agentStatus.config?.symbols && agentStatus.config.symbols.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-600">监控:</span>
+                  <div className="flex gap-1.5">
+                    {agentStatus.config.symbols.slice(0, 3).map((symbol: string) => (
+                      <span key={symbol} className="text-xs bg-teal-100 text-teal-700 px-2 py-0.5 rounded font-medium">
+                        {symbol}
+                      </span>
+                    ))}
+                    {agentStatus.config.symbols.length > 3 && (
+                      <span className="text-xs text-gray-500">+{agentStatus.config.symbols.length - 3}</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 最后运行时间 */}
+              {agentStatus.last_run_time && (
+                <div className="flex items-center gap-1.5 text-gray-700">
+                  <span className="text-gray-600">最后运行:</span>
+                  <span className="text-xs font-medium">
+                    {new Date(agentStatus.last_run_time).toLocaleTimeString('zh-CN')}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* 错误提示 */}
+            {agentStatus.last_error && (
+              <div className="text-xs text-red-600 font-medium max-w-md truncate" title={agentStatus.last_error}>
+                ⚠️ {agentStatus.last_error}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* 账户总览 - 参考 Alpha Arena 风格 */}
         <div className="grid grid-cols-3 gap-4">
           {/* 可用资金 */}
@@ -93,18 +178,28 @@ export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
           <div className="bg-white rounded-lg p-5 border border-gray-200">
             <div className="flex justify-between items-start mb-2">
               <div className="text-sm text-gray-600">Total P&L:</div>
-              <div className="text-sm text-gray-600">Net Realized:</div>
+              <div className="text-sm text-gray-600">Unrealized:</div>
             </div>
             <div className="flex justify-between items-center">
               <div className={`text-3xl font-bold ${
-                (session?.total_pnl || 0) >= 0 ? 'text-green-600' : 'text-red-600'
+                ((session?.total_pnl || 0) + (exchangeData?.account?.totalUnrealizedProfit || 0)) >= 0 ? 'text-green-600' : 'text-red-600'
               }`}>
-                {(session?.total_pnl || 0) >= 0 ? '+' : ''}${formatNumber(session?.total_pnl, 2)}
+                {((session?.total_pnl || 0) + (exchangeData?.account?.totalUnrealizedProfit || 0)) >= 0 ? '+' : ''}${formatNumber((session?.total_pnl || 0) + (exchangeData?.account?.totalUnrealizedProfit || 0), 2)}
               </div>
-              <div className={`text-3xl font-bold ${
-                (session?.total_pnl || 0) >= 0 ? 'text-green-600' : 'text-red-600'
+              <div className={`text-2xl font-bold ${
+                (exchangeData?.account?.totalUnrealizedProfit || 0) >= 0 ? 'text-green-600' : 'text-red-600'
               }`}>
-                {(session?.total_pnl || 0) >= 0 ? '+' : ''}${formatNumber(session?.total_pnl, 2)}
+                {(exchangeData?.account?.totalUnrealizedProfit || 0) >= 0 ? '+' : ''}${formatNumber(exchangeData?.account?.totalUnrealizedProfit, 2)}
+              </div>
+            </div>
+            <div className="mt-2 pt-2 border-t border-gray-100">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-600">Realized:</span>
+                <span className={`font-semibold ${
+                  (session?.total_pnl || 0) >= 0 ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {(session?.total_pnl || 0) >= 0 ? '+' : ''}${formatNumber(session?.total_pnl, 2)}
+                </span>
               </div>
             </div>
           </div>
@@ -128,59 +223,9 @@ export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
           </div>
         </div>
 
-        {/* 交易统计和持仓时间 */}
-        <div className="grid grid-cols-2 gap-4">
-          {/* 交易统计 */}
-          <div className="bg-white rounded-lg p-5 border border-gray-200">
-            <div className="grid grid-cols-4 gap-4 text-sm">
-              <div>
-                <div className="text-gray-600 mb-1">Confidence:</div>
-                <div className="font-bold text-gray-900">--</div>
-              </div>
-              <div>
-                <div className="text-gray-600 mb-1">Biggest Win:</div>
-                <div className="font-bold text-green-600">$0</div>
-              </div>
-              <div>
-                <div className="text-gray-600 mb-1">Biggest Loss:</div>
-                <div className="font-bold text-red-600">$0</div>
-              </div>
-              <div>
-                <div className="text-gray-600 mb-1">Trades:</div>
-                <div className="font-bold text-gray-900">{trades.length}</div>
-              </div>
-            </div>
-          </div>
-
-          {/* 持仓时间分布 */}
-          <div className="bg-white rounded-lg p-5 border border-gray-200">
-            <div className="text-sm font-semibold text-gray-900 mb-3">HOLD TIMES</div>
-            <div className="grid grid-cols-3 gap-4 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Long:</span>
-                <span className="font-bold text-green-600">
-                  {holdTimes?.long_pct !== undefined ? `${holdTimes.long_pct}%` : '--'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Short:</span>
-                <span className="font-bold text-red-600">
-                  {holdTimes?.short_pct !== undefined ? `${holdTimes.short_pct}%` : '--'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Flat:</span>
-                <span className="font-bold text-gray-900">
-                  {holdTimes?.flat_pct !== undefined ? `${holdTimes.flat_pct}%` : '--'}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Agent 监控 */}
+        {/* 资产变化趋势图 - 全宽显示 */}
         <div>
-          <AgentMonitor sessionId={sessionId} />
+          <AssetChart sessionId={sessionId} />
         </div>
 
         {/* 实时持仓 - Active Positions */}
@@ -261,6 +306,56 @@ export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
             </div>
           </div>
         )}
+
+        {/* 交易统计和持仓时间 */}
+        <div className="grid grid-cols-2 gap-4">
+          {/* 交易统计 */}
+          <div className="bg-white rounded-lg p-5 border border-gray-200">
+            <div className="grid grid-cols-4 gap-4 text-sm">
+              <div>
+                <div className="text-gray-600 mb-1">Confidence:</div>
+                <div className="font-bold text-gray-900">--</div>
+              </div>
+              <div>
+                <div className="text-gray-600 mb-1">Biggest Win:</div>
+                <div className="font-bold text-green-600">$0</div>
+              </div>
+              <div>
+                <div className="text-gray-600 mb-1">Biggest Loss:</div>
+                <div className="font-bold text-red-600">$0</div>
+              </div>
+              <div>
+                <div className="text-gray-600 mb-1">Trades:</div>
+                <div className="font-bold text-gray-900">{trades.length}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* 持仓时间分布 */}
+          <div className="bg-white rounded-lg p-5 border border-gray-200">
+            <div className="text-sm font-semibold text-gray-900 mb-3">HOLD TIMES</div>
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Long:</span>
+                <span className="font-bold text-green-600">
+                  {holdTimes?.long_pct !== undefined ? `${holdTimes.long_pct}%` : '--'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Short:</span>
+                <span className="font-bold text-red-600">
+                  {holdTimes?.short_pct !== undefined ? `${holdTimes.short_pct}%` : '--'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Flat:</span>
+                <span className="font-bold text-gray-900">
+                  {holdTimes?.flat_pct !== undefined ? `${holdTimes.flat_pct}%` : '--'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* 交易历史 - Last Trades */}
         <div className="bg-white rounded-lg border border-gray-200">
@@ -361,11 +456,40 @@ export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
       </div>
 
       {/* 右侧侧边栏 - AI 对话 */}
-      <div className="w-[420px] flex-shrink-0">
-        <div className="sticky top-0 h-[calc(100vh-180px)] bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
-          <ChatPanel sessionId={sessionId} />
-        </div>
+      <div
+        className={`flex-shrink-0 transition-all duration-300 ease-in-out ${
+          isChatPanelVisible ? 'w-[420px] opacity-100' : 'w-0 opacity-0'
+        }`}
+      >
+        {isChatPanelVisible && (
+          <div className="sticky top-0 h-[calc(100vh-180px)] bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
+            <ChatPanel sessionId={sessionId} />
+          </div>
+        )}
       </div>
+
+      {/* 切换按钮 - 固定在右侧 */}
+      <button
+        onClick={() => setIsChatPanelVisible(!isChatPanelVisible)}
+        className={`fixed right-0 top-1/2 -translate-y-1/2 bg-teal-500 hover:bg-teal-600 text-white p-3 shadow-lg transition-all duration-300 z-50 ${
+          isChatPanelVisible ? 'rounded-l-lg' : 'rounded-l-lg mr-0'
+        }`}
+        title={isChatPanelVisible ? '收起对话面板' : '展开对话面板'}
+        style={{
+          right: isChatPanelVisible ? '420px' : '0px',
+        }}
+      >
+        <svg
+          className={`w-5 h-5 transition-transform duration-300 ${
+            isChatPanelVisible ? 'rotate-0' : 'rotate-180'
+          }`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
 
       {/* 自定义滚动条样式 */}
       <style jsx>{`

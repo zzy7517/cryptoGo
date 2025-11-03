@@ -118,7 +118,12 @@ CREATE TABLE ai_decisions (
     
     -- 执行情况
     executed BOOLEAN DEFAULT FALSE,
-    execution_result JSONB
+    execution_result JSONB,
+    
+    -- 账户信息（用于资产变化追踪）
+    account_balance NUMERIC(20, 4),
+    unrealized_pnl NUMERIC(20, 4),
+    total_asset NUMERIC(20, 4)
 );
 
 -- 索引
@@ -138,6 +143,9 @@ COMMENT ON COLUMN ai_decisions.reasoning IS 'AI的推理过程';
 COMMENT ON COLUMN ai_decisions.suggested_actions IS '建议的具体操作（JSON格式）';
 COMMENT ON COLUMN ai_decisions.executed IS '是否已执行';
 COMMENT ON COLUMN ai_decisions.execution_result IS '执行结果（JSON格式）';
+COMMENT ON COLUMN ai_decisions.account_balance IS '决策时的账户总余额';
+COMMENT ON COLUMN ai_decisions.unrealized_pnl IS '决策时的浮动盈亏（未实现盈亏）';
+COMMENT ON COLUMN ai_decisions.total_asset IS '决策时的总资产（余额 + 浮动盈亏）';
 
 
 -- ============================================

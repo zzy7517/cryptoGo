@@ -655,6 +655,29 @@ class TradingAgentService:
                 # 计算平均信心度
                 avg_confidence = sum([d.confidence for d in decisions]) / len(decisions) if decisions else 50
 
+                # 获取账户信息和浮动盈亏
+                account_balance = None
+                unrealized_pnl = None
+                total_asset = None
+                
+                try:
+                    from .account_service import AccountService
+                    account_service = AccountService.get_instance()
+                    account_info = account_service.get_account_info()
+                    
+                    # 账户余额（可用余额 + 保证金）
+                    account_balance = float(account_info.get('totalMarginBalance', 0))
+                    
+                    # 浮动盈亏
+                    unrealized_pnl = float(account_info.get('totalUnrealizedProfit', 0))
+                    
+                    # 总资产 = 余额 + 浮动盈亏
+                    total_asset = account_balance + unrealized_pnl
+                    
+                    logger.info(f"📊 账户信息: 余额=${account_balance:.2f}, 浮动盈亏=${unrealized_pnl:.2f}, 总资产=${total_asset:.2f}")
+                except Exception as e:
+                    logger.warning(f"⚠️ 获取账户信息失败: {e}")
+
                 # 保存决策（prompt_data存储完整的用户输入prompt）
                 decision_repo.save_decision(
                     session_id=self.session_id,
@@ -671,7 +694,10 @@ class TradingAgentService:
                         "decisions": [d.to_dict() for d in decisions],
                         "execution_results": execution_results
                     },
-                    executed=True
+                    executed=True,
+                    account_balance=account_balance,
+                    unrealized_pnl=unrealized_pnl,
+                    total_asset=total_asset
                 )
 
                 logger.info("💾 决策已保存到数据库")

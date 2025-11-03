@@ -63,6 +63,14 @@ session_router.add_api_route(
     summary="获取会话的AI决策记录"
 )
 
+# GET /api/v1/session/{session_id}/asset-timeline - 获取资产变化时序数据
+session_router.add_api_route(
+    "/{session_id}/asset-timeline",
+    session_handlers.get_asset_timeline,
+    methods=["GET"],
+    summary="获取会话的资产变化时序数据"
+)
+
 
 # ============================================
 # Agent 路由

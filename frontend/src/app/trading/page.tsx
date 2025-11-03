@@ -114,14 +114,6 @@ export default function TradingPage() {
                 CryptoGo
                 <span className="ml-3 text-sm font-normal text-gray-500">by AI</span>
               </h1>
-              <div className="flex items-center gap-6 text-sm">
-                <button className="text-gray-900 font-semibold border-b-2 border-gray-900 pb-1">
-                  LIVE
-                </button>
-                <button className="text-gray-500 hover:text-gray-900 transition-colors">
-                  HISTORY
-                </button>
-              </div>
             </div>
 
             {/* 右侧控制按钮 */}

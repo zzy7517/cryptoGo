@@ -113,6 +113,23 @@ export const sessionApi = {
     });
     return response.data;
   },
+
+  /**
+   * 获取会话的资产变化时序数据（优化版，支持采样）
+   */
+  getAssetTimeline: async (
+    sessionId: number,
+    sampleInterval?: number,
+    maxPoints?: number
+  ): Promise<any> => {
+    const response = await apiClient.get(`${API_V1}/session/${sessionId}/asset-timeline`, {
+      params: {
+        sample_interval: sampleInterval,
+        max_points: maxPoints,
+      }
+    });
+    return response.data;
+  },
 };
 
 /**
