@@ -250,9 +250,19 @@ class PromptDataCollector:
             # 🆕 从交易所获取实时账户信息
             try:
                 account_info = self.exchange.get_account_info()
+
+                # 🆕 打印原始账户信息
+                logger.info("=" * 80)
+                logger.info("📊 从交易所获取的原始账户信息:")
+                logger.info(f"  totalWalletBalance: {account_info.get('totalWalletBalance', 'N/A')}")
+                logger.info(f"  availableBalance: {account_info.get('availableBalance', 'N/A')}")
+                logger.info(f"  totalMarginBalance: {account_info.get('totalMarginBalance', 'N/A')}")
+                logger.info(f"  totalUnrealizedProfit: {account_info.get('totalUnrealizedProfit', 'N/A')}")
+                logger.info("=" * 80)
+
                 total_equity = float(account_info.get('totalWalletBalance', current_capital))
                 available_balance = float(account_info.get('availableBalance', current_capital))
-                
+
                 # 获取持仓信息以计算保证金
                 positions = self.exchange.get_positions()
                 
@@ -560,7 +570,18 @@ class PromptBuilder:
                 margin_used_pct=account_data.get('margin_used_pct', 0),  # 🆕
                 position_count=account_data.get('position_count', 0)  # 🆕
             )
-            
+
+            # 🆕 打印账户信息和持仓信息部分
+            logger.info("=" * 80)
+            logger.info("📋 传给AI的账户和持仓信息:")
+            logger.info(f"  净值(account_value): ${account_data.get('account_value', 0):.2f}")
+            logger.info(f"  可用余额(available_cash): ${account_data.get('available_cash', 0):.2f}")
+            logger.info(f"  余额占比(balance_pct): {account_data.get('balance_pct', 0):.1f}%")
+            logger.info(f"  保证金占用(margin_used_pct): {account_data.get('margin_used_pct', 0):.1f}%")
+            logger.info(f"  持仓数量(position_count): {account_data.get('position_count', 0)}")
+            logger.info(f"  持仓详情(positions_detail): {positions_text}")
+            logger.info("=" * 80)
+
             logger.info("✅ 提示词构建完成")
             return prompt
             
