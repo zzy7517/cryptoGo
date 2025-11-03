@@ -23,8 +23,9 @@ docker/
 在项目根目录创建 `.env` 文件：
 
 ```bash
-# 数据库配置 (使用 Supabase)
-DATABASE_URL=postgresql://user:password@host:port/dbname
+# 数据库配置（可选，默认使用 SQLite）
+# DATABASE_URL=sqlite:///./data/trading.db  # 默认值，无需配置
+# DATABASE_URL=postgresql://user:password@host:port/dbname  # 如需使用 PostgreSQL
 
 # 币安 API 配置
 BINANCE_API_KEY=your_api_key
@@ -38,6 +39,8 @@ OPENAI_API_BASE=https://api.deepseek.com
 # 前端配置
 NEXT_PUBLIC_API_URL=http://localhost:9527
 ```
+
+> 💡 **零配置数据库**：默认使用 SQLite，数据存储在 `backend/data/trading.db`，无需外部数据库！
 
 ### 2. 构建并启动服务
 
@@ -215,8 +218,8 @@ docker-compose logs frontend
 ```
 
 ### 问题 2: 数据库连接失败
-- 检查 `.env` 中的 `DATABASE_URL` 配置
-- 确认 Supabase 允许服务器 IP 访问
+- **SQLite** (默认)：检查 `backend/data` 目录是否可写
+- **PostgreSQL** (可选)：检查 `.env` 中的 `DATABASE_URL` 配置
 
 ### 问题 3: 前端无法访问后端
 - 检查 `NEXT_PUBLIC_API_URL` 配置

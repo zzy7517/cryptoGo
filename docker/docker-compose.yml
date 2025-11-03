@@ -9,9 +9,13 @@ services:
     container_name: cryptogo-backend
     ports:
       - "9527:9527"
+    volumes:
+      # 挂载数据目录，持久化 SQLite 数据库
+      - ../backend/data:/app/data
     environment:
-      # 数据库配置 - 使用你的 Supabase 数据库
-      - DATABASE_URL=${DATABASE_URL}
+      # 数据库配置 - 默认使用 SQLite（无需外部数据库）
+      # 如需使用 PostgreSQL，设置环境变量：DATABASE_URL=postgresql://...
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./data/trading.db}
 
       # 币安 API 配置
       - BINANCE_API_KEY=${BINANCE_API_KEY}
