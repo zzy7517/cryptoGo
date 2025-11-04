@@ -34,10 +34,9 @@ class Settings(BaseSettings):
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
     DEEPSEEK_MODEL: str = "deepseek-chat"
     
-    # 数据库配置 - 默认使用 SQLite（本地文件数据库）
-    # SQLite: sqlite:///./data/trading.db （推荐，零配置）
-    # PostgreSQL: postgresql://user:pass@host:5432/dbname （可选，如需远程数据库）
-    DATABASE_URL: str = "sqlite:///./data/trading.db"
+    # 数据库配置 - Supabase PostgreSQL
+    DATABASE_URL: Optional[str] = None
+    # 格式示例: postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres
     
     # CORS 配置
     CORS_ORIGINS: list = [

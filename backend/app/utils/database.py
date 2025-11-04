@@ -1,12 +1,9 @@
 """
 数据库连接管理
-支持 SQLite（默认）和 PostgreSQL，提供 SQLAlchemy 引擎和会话管理
+管理 PostgreSQL 数据库连接，提供 SQLAlchemy 引擎和会话管理
 创建时间: 2025-10-27
-更新时间: 2025-11-03 - 添加 SQLite 支持
 """
-import os
-from pathlib import Path
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from typing import Generator
@@ -33,42 +30,14 @@ def init_db():
         return
     
     try:
-        # 判断是否为 SQLite
-        is_sqlite = settings.DATABASE_URL.startswith("sqlite")
-        
-        # SQLite：确保数据目录存在
-        if is_sqlite:
-            db_path = settings.DATABASE_URL.replace("sqlite:///", "")
-            db_dir = os.path.dirname(db_path)
-            if db_dir:
-                Path(db_dir).mkdir(parents=True, exist_ok=True)
-                logger.info(f"数据目录已创建: {db_dir}")
-        
-        # 创建引擎（根据数据库类型使用不同配置）
-        if is_sqlite:
-            engine = create_engine(
-                settings.DATABASE_URL,
-                connect_args={"check_same_thread": False},  # SQLite 多线程支持
-                echo=False
-            )
-            
-            # 启用 SQLite 外键约束
-            @event.listens_for(engine, "connect")
-            def set_sqlite_pragma(dbapi_conn, connection_record):
-                cursor = dbapi_conn.cursor()
-                cursor.execute("PRAGMA foreign_keys=ON")
-                cursor.execute("PRAGMA journal_mode=WAL")  # 使用 WAL 模式提升性能
-                cursor.close()
-                
-        else:
-            # PostgreSQL 配置
-            engine = create_engine(
-                settings.DATABASE_URL,
-                pool_pre_ping=True,
-                pool_size=5,
-                max_overflow=10,
-                echo=False
-            )
+        # 创建引擎
+        engine = create_engine(
+            settings.DATABASE_URL,
+            pool_pre_ping=True,  # 连接前检查
+            pool_size=5,         # 连接池大小
+            max_overflow=10,     # 最大溢出连接数
+            echo=False  # 关闭 SQL 日志打印
+        )
         
         # 创建会话工厂
         SessionLocal = sessionmaker(
@@ -77,8 +46,10 @@ def init_db():
             bind=engine
         )
         
-        db_info = "SQLite (local file)" if is_sqlite else settings.DATABASE_URL.split('@')[-1]
-        logger.info(f"数据库连接初始化成功: {db_info}")
+        logger.info(
+            "数据库连接初始化成功",
+            database=settings.DATABASE_URL.split('@')[-1] if '@' in settings.DATABASE_URL else "hidden"
+        )
         
     except Exception as e:
         logger.error(f"数据库连接初始化失败: {str(e)}")
