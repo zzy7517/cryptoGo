@@ -3,6 +3,7 @@ AI 决策 Repository
 管理 AI 交易决策的数据访问层，记录和查询基于会话的 AI 决策
 修改时间: 2025-10-29 (添加会话支持)
 """
+import json
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
@@ -39,15 +40,20 @@ class AIDecisionRepository:
         total_asset: Optional[float] = None
     ) -> AIDecision:
         try:
+            # 序列化 JSON 字段（SQLite 兼容）
+            symbols_json = json.dumps(symbols) if symbols else None
+            prompt_data_json = json.dumps(prompt_data) if prompt_data else None
+            suggested_actions_json = json.dumps(suggested_actions or [])
+
             decision = AIDecision(
                 session_id=session_id,
-                symbols=symbols,
+                symbols=symbols_json,
                 decision_type=decision_type,
                 confidence=confidence,
-                prompt_data=prompt_data,
+                prompt_data=prompt_data_json,
                 ai_response=ai_response,
                 reasoning=reasoning,
-                suggested_actions=suggested_actions or [],
+                suggested_actions=suggested_actions_json,
                 executed=executed,
                 account_balance=account_balance,
                 unrealized_pnl=unrealized_pnl,

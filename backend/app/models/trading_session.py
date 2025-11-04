@@ -3,9 +3,9 @@
 定义交易会话的数据结构，记录每次交易运行实例的完整信息
 创建时间: 2025-10-27
 更新时间: 2025-10-31 - 去掉 Agent 概念，统一为 Session
+更新时间: 2025-11-04 - 改用 SQLite，移除 PostgreSQL 特定类型
 """
-from sqlalchemy import Column, BigInteger, String, Numeric, Integer, Boolean, Text, DateTime, Index, CheckConstraint, ARRAY
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Column, BigInteger, String, Numeric, Integer, Boolean, Text, DateTime, Index, CheckConstraint
 from sqlalchemy.sql import func
 
 from ..utils.database import Base
@@ -46,12 +46,12 @@ class TradingSession(Base):
     last_decision_time = Column(DateTime(timezone=True), comment="最后决策时间")
     decision_count = Column(Integer, default=0, comment="决策执行次数")
     decision_interval = Column(Integer, default=180, comment="决策间隔（秒）")
-    trading_symbols = Column(ARRAY(Text), comment="交易对列表")
+    trading_symbols = Column(Text, comment="交易对列表（JSON数组格式）")
     last_error = Column(Text, comment="最后的错误信息")
-    trading_params = Column(JSONB, comment="交易参数（JSON格式，包含 risk_params 等）")
-    
+    trading_params = Column(Text, comment="交易参数（JSON格式，包含 risk_params 等）")
+
     # 配置信息
-    config = Column(JSONB, comment="运行配置（JSON格式）")
+    config = Column(Text, comment="运行配置（JSON格式）")
     
     # 备注
     notes = Column(Text, comment="备注信息")

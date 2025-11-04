@@ -2,9 +2,9 @@
 AI 决策模型
 定义 AI 决策记录的数据结构，保存 AI 分析和决策结果
 创建时间: 2025-10-27
+更新时间: 2025-11-04 - 改用 SQLite，移除 PostgreSQL 特定类型
 """
 from sqlalchemy import Column, BigInteger, String, Numeric, Boolean, Text, DateTime, Index, CheckConstraint, ForeignKey
-from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 from sqlalchemy.sql import func
 
 from ..utils.database import Base
@@ -23,21 +23,21 @@ class AIDecision(Base):
     session_id = Column(BigInteger, ForeignKey('trading_sessions.id', ondelete='CASCADE'), comment="所属交易会话ID")
     
     # 决策信息
-    symbols = Column(ARRAY(String), comment="分析的币种列表")
+    symbols = Column(Text, comment="分析的币种列表（JSON数组格式）")
     decision_type = Column(String(20), comment="决策类型: buy, sell, hold, rebalance, close")
     confidence = Column(Numeric(5, 4), comment="置信度 (0-1)")
-    
+
     # AI 输入/输出
-    prompt_data = Column(JSONB, comment="给AI的完整prompt数据（JSON格式）")
+    prompt_data = Column(Text, comment="给AI的完整prompt数据（JSON格式）")
     ai_response = Column(Text, comment="AI的原始回复")
     reasoning = Column(Text, comment="AI的推理过程")
-    
+
     # 建议的交易参数
-    suggested_actions = Column(JSONB, comment="建议的具体操作（JSON格式）")
-    
+    suggested_actions = Column(Text, comment="建议的具体操作（JSON格式）")
+
     # 执行情况
     executed = Column(Boolean, default=False, comment="是否已执行")
-    execution_result = Column(JSONB, comment="执行结果（JSON格式）")
+    execution_result = Column(Text, comment="执行结果（JSON格式）")
     
     # 账户信息（用于资产变化追踪）
     account_balance = Column(Numeric(20, 4), comment="决策时的账户总余额")

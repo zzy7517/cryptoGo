@@ -2,7 +2,9 @@
 交易会话 Repository
 管理交易会话的数据访问层，处理会话的 CRUD 操作和状态管理
 创建时间: 2025-10-27
+更新时间: 2025-11-04 - 添加 JSON 序列化支持（SQLite 兼容）
 """
+import json
 from typing import Optional, List
 from datetime import datetime
 from sqlalchemy.orm import Session
@@ -56,11 +58,15 @@ class TradingSessionRepository:
         config: Optional[dict] = None
     ) -> TradingSession:
         initial_cap = Decimal(str(initial_capital)) if initial_capital else None
+
+        # 将 config 字典序列化为 JSON 字符串（SQLite 兼容）
+        config_json = json.dumps(config) if config else None
+
         session = TradingSession(
             session_name=session_name,
             initial_capital=initial_cap,
             current_capital=initial_cap,  # 初始时 current_capital = initial_capital
-            config=config,
+            config=config_json,
             status='running'
         )
         self.db.add(session)

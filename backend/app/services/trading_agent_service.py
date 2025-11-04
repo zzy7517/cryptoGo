@@ -2,8 +2,10 @@
 Trading Agent Service
 核心逻辑：数据收集 -> AI分析决策 -> 执行交易 -> 记录保存
 创建时间: 2025-10-30
+更新时间: 2025-11-04 - 添加 JSON 序列化支持（SQLite 兼容）
 """
 
+import json
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -861,6 +863,19 @@ class BackgroundAgentManager:
         if session_data.get('background_status') == 'idle':
             return None
 
+        # 反序列化 JSON 字段
+        trading_symbols = session_data.get('trading_symbols')
+        if trading_symbols and isinstance(trading_symbols, str):
+            trading_symbols = json.loads(trading_symbols)
+        elif not trading_symbols:
+            trading_symbols = []
+
+        trading_params = session_data.get('trading_params')
+        if trading_params and isinstance(trading_params, str):
+            trading_params = json.loads(trading_params)
+        elif not trading_params:
+            trading_params = {}
+
         return {
             'session_id': session_id,
             'status': session_data.get('background_status', 'idle'),
@@ -869,9 +884,9 @@ class BackgroundAgentManager:
             'last_run_time': session_data.get('last_decision_time').isoformat() if session_data.get('last_decision_time') else None,
             'run_count': session_data.get('decision_count', 0),
             'config': {
-                'symbols': session_data.get('trading_symbols', []),
+                'symbols': trading_symbols,
                 'decision_interval': session_data.get('decision_interval', 180),
-                'risk_params': session_data.get('trading_params', {})
+                'risk_params': trading_params
             },
             'last_error': session_data.get('last_error')
         }
@@ -1065,7 +1080,7 @@ class BackgroundAgentManager:
     async def _update_session_status(self, session_id: int, **kwargs):
         """
         更新会话状态字段
-        
+
         Args:
             session_id: 会话 ID
             **kwargs: 要更新的字段（background_status, decision_count 等）
@@ -1078,9 +1093,12 @@ class BackgroundAgentManager:
                 if session:
                     for key, value in kwargs.items():
                         if hasattr(session, key):
+                            # 序列化 JSON 字段（SQLite 兼容）
+                            if key in ['trading_symbols', 'trading_params'] and value is not None:
+                                value = json.dumps(value) if not isinstance(value, str) else value
                             setattr(session, key, value)
                     db.commit()
-            
+
             await asyncio.to_thread(update)
         except Exception as e:
             logger.error(f"更新会话状态失败: {e}", session_id=session_id)

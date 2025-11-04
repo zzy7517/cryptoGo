@@ -2,8 +2,9 @@
 交易记录模型
 定义交易记录的数据结构，记录每笔交易的详细信息
 创建时间: 2025-10-27
+更新时间: 2025-11-04 - 改用 SQLite，移除 PostgreSQL 特定类型
 """
-from sqlalchemy import Column, BigInteger, String, Numeric, Integer, DateTime, Interval, Index, CheckConstraint, ForeignKey
+from sqlalchemy import Column, BigInteger, String, Numeric, Integer, DateTime, Index, CheckConstraint, ForeignKey
 from sqlalchemy.sql import func
 
 from ..utils.database import Base
@@ -41,7 +42,7 @@ class Trade(Base):
     # 时间信息
     entry_time = Column(DateTime(timezone=True), comment="开仓时间")
     exit_time = Column(DateTime(timezone=True), comment="平仓时间")
-    holding_duration = Column(Interval, comment="持仓时长（仅已平仓交易）")
+    holding_duration = Column(Integer, comment="持仓时长（秒，仅已平仓交易）")
     
     # 费用
     entry_fee = Column(Numeric(20, 8), comment="开仓手续费")

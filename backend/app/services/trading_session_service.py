@@ -2,7 +2,9 @@
 交易会话服务 - 管理交易会话的生命周期
 提供会话的创建、结束、统计、查询等完整业务逻辑
 创建时间: 2025-10-29
+更新时间: 2025-11-04 - 添加 JSON 反序列化支持（SQLite 兼容）
 """
+import json
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
@@ -183,6 +185,9 @@ class TradingSessionService:
         # 计算 Hold Times（持仓时间占比）
         hold_times = self._calculate_hold_times(session, trades)
 
+        # 反序列化 JSON 字段
+        config = json.loads(session.config) if session.config else None
+
         return {
             "session": {
                 "id": session.id,
@@ -197,7 +202,7 @@ class TradingSessionService:
                 "total_trades": session.total_trades,
                 "winning_trades": session.winning_trades,
                 "losing_trades": session.losing_trades,
-                "config": session.config,
+                "config": config,
                 "notes": session.notes
             },
             "positions": [
@@ -234,7 +239,7 @@ class TradingSessionService:
                 {
                     "id": d.id,
                     "decision_type": d.decision_type,
-                    "symbols": d.symbols,
+                    "symbols": json.loads(d.symbols) if d.symbols and isinstance(d.symbols, str) else (d.symbols or []),
                     "confidence": float(d.confidence) if d.confidence else None,
                     "reasoning": d.reasoning,
                     "created_at": d.created_at.isoformat() if d.created_at else None

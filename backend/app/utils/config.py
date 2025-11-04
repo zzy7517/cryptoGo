@@ -34,9 +34,7 @@ class Settings(BaseSettings):
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
     DEEPSEEK_MODEL: str = "deepseek-chat"
     
-    # 数据库配置 - 默认使用 SQLite（本地文件数据库）
-    # SQLite: sqlite:///./data/trading.db （推荐，零配置）
-    # PostgreSQL: postgresql://user:pass@host:5432/dbname （可选，如需远程数据库）
+    # 数据库配置 - 使用 SQLite（本地文件数据库）
     DATABASE_URL: str = "sqlite:///./data/trading.db"
     
     # CORS 配置

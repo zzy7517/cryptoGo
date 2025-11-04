@@ -2,7 +2,9 @@
 交易会话处理函数
 所有会话相关的业务逻辑处理
 创建时间: 2025-10-29
+更新时间: 2025-11-04 - 添加 JSON 反序列化支持（SQLite 兼容）
 """
+import json
 from fastapi import HTTPException, Depends, Query
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
@@ -188,7 +190,10 @@ async def get_active_session(db: Session = Depends(get_db)):
         # 获取 Agent 状态
         manager = get_background_agent_manager()
         agent_status = await manager.get_agent_status(session.id)
-        
+
+        # 反序列化 JSON 字段
+        config = json.loads(session.config) if session.config else None
+
         return {
             "success": True,
             "data": {
@@ -197,7 +202,7 @@ async def get_active_session(db: Session = Depends(get_db)):
                 "status": session.status,
                 "initial_capital": float(session.initial_capital) if session.initial_capital else None,
                 "created_at": session.created_at.isoformat(),
-                "config": session.config,
+                "config": config,
                 "agent_status": agent_status  # 添加 Agent 状态
             }
         }
