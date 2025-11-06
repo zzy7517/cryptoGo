@@ -30,7 +30,33 @@ async def start_session(
     如果 auto_start_agent=True，则自动启动后台 Agent。
     """
     try:
-        # 1. 创建会话
+        # 1. 检查账户余额（排除保证金）
+        if request.initial_capital:
+            from ...services.account_service import AccountService
+            
+            try:
+                account_service = AccountService.get_instance()
+                account_info = account_service.get_account_info()
+                available_balance = account_info.get('availableBalance', 0)
+                
+                logger.info(
+                    f"检查账户余额: 可用余额={available_balance} USDT, 请求金额={request.initial_capital} USDT"
+                )
+                
+                # 如果输入金额大于可用余额，返回错误
+                if request.initial_capital > available_balance:
+                    raise BusinessException(
+                        f"账户余额不足！可用余额: {available_balance:.2f} USDT，请求金额: {request.initial_capital:.2f} USDT",
+                        error_code="INSUFFICIENT_BALANCE"
+                    )
+            except BusinessException:
+                # 重新抛出业务异常
+                raise
+            except Exception as e:
+                # 如果获取账户信息失败，记录警告但不阻止会话创建
+                logger.warning(f"无法获取账户信息: {str(e)}，跳过余额检查")
+        
+        # 2. 创建会话
         service = TradingSessionService(db)
         session = service.start_session(
             session_name=request.session_name,
@@ -47,15 +73,18 @@ async def start_session(
             "created_at": session.created_at.isoformat()
         }
 
-        # 2. 如果需要，自动启动 Agent
+        # 3. 如果需要，自动启动 Agent
         agent_started = False
         agent_error = None
 
         if request.auto_start_agent:
             try:
-                # 验证必需参数
-                if not request.symbols or len(request.symbols) == 0:
-                    raise ValueError("启动 Agent 需要至少选择一个交易币种")
+                # 使用默认交易币种（如果没有提供）
+                symbols = request.symbols
+                if not symbols or len(symbols) == 0:
+                    # 默认使用 BTC, ETH, DOGE
+                    symbols = ["BTC/USDT:USDT", "ETH/USDT:USDT", "DOGE/USDT:USDT"]
+                    logger.info(f"未提供交易币种，使用默认值: {symbols}")
 
                 # 获取后台 Agent 管理器
                 manager = get_background_agent_manager()
@@ -67,7 +96,7 @@ async def start_session(
                 # 启动后台 Agent
                 agent_result = await manager.start_background_agent(
                     session_id=session.id,
-                    symbols=request.symbols,
+                    symbols=symbols,
                     risk_params=risk_params,
                     decision_interval=request.decision_interval
                 )
@@ -90,7 +119,7 @@ async def start_session(
                     session_id=session.id
                 )
 
-        # 3. 返回响应
+        # 4. 返回响应
         message = "交易会话已开始"
         if agent_started:
             message += "，Agent 已启动"
@@ -276,21 +305,26 @@ async def get_ai_decisions(
         decision_repo = AIDecisionRepository(db)
         decisions = decision_repo.get_by_session(session_id, limit=limit)
 
-        # 转换为前端友好的格式
         decisions_data = []
         for d in decisions:
+            # 反序列化 JSON 字段
+            symbols = json.loads(d.symbols) if d.symbols else []
+            prompt_data = json.loads(d.prompt_data) if d.prompt_data else None
+            suggested_actions = json.loads(d.suggested_actions) if d.suggested_actions else []
+            execution_result = json.loads(d.execution_result) if d.execution_result else None
+            
             decisions_data.append({
                 "id": d.id,
                 "created_at": d.created_at.isoformat(),
-                "symbols": d.symbols,
+                "symbols": symbols,  # 反序列化为数组
                 "decision_type": d.decision_type,
                 "confidence": float(d.confidence) if d.confidence else None,
-                "prompt_data": d.prompt_data,  # 用户输入（市场数据）
+                "prompt_data": prompt_data,  # 反序列化为对象
                 "ai_response": d.ai_response,  # AI原始回复
                 "reasoning": d.reasoning,  # AI推理过程
-                "suggested_actions": d.suggested_actions,  # 建议操作
+                "suggested_actions": suggested_actions,  # 反序列化为数组
                 "executed": d.executed,
-                "execution_result": d.execution_result
+                "execution_result": execution_result  # 反序列化为对象
             })
 
         return {
@@ -305,28 +339,20 @@ async def get_ai_decisions(
 
 async def get_asset_timeline(
     session_id: int,
-    sample_interval: int = Query(5, ge=1, le=60, description="采样间隔（分钟），默认5分钟"),
-    max_points: int = Query(200, ge=10, le=500, description="最大返回数据点数，默认200"),
     db: Session = Depends(get_db)
 ):
     """
-    获取会话的资产变化时序数据（优化版）
+    获取会话的资产变化时序数据（全量版）
 
-    返回指定会话的资产变化时间线，包括账户余额、浮动盈亏和总资产。
+    返回指定会话的所有AI决策记录，包括账户余额、浮动盈亏和总资产。
 
-    优化策略：
-    1. 智能采样：按时间间隔采样，避免返回过多数据点
-    2. 关键点保留：保留第一个和最后一个数据点，确保完整时间范围
-    3. 数据限制：限制最大返回数据点数，保证前端渲染性能
+    由于AI决策频率较低（通常每3分钟一次），数据量很小，直接返回全量数据。
 
     参数：
     - session_id: 会话ID
-    - sample_interval: 采样间隔（分钟），默认5分钟。如果数据点仍然太多，会自动调整
-    - max_points: 最大返回数据点数，默认200
     """
     try:
         from ...repositories.ai_decision_repo import AIDecisionRepository
-        from datetime import datetime, timedelta
 
         decision_repo = AIDecisionRepository(db)
 
@@ -343,77 +369,19 @@ async def get_asset_timeline(
                 "data": [],
                 "count": 0,
                 "metadata": {
-                    "total_records": 0,
-                    "sampled_records": 0,
-                    "sample_interval_minutes": sample_interval
+                    "total_records": 0
                 }
             }
 
-        # 如果数据点少于max_points，直接返回所有数据
-        if len(valid_decisions) <= max_points:
-            timeline_data = []
-            for d in valid_decisions:
-                timeline_data.append({
-                    "timestamp": d.created_at.isoformat(),
-                    "account_balance": float(d.account_balance),
-                    "unrealized_pnl": float(d.unrealized_pnl) if d.unrealized_pnl is not None else 0,
-                    "total_asset": float(d.total_asset) if d.total_asset is not None else float(d.account_balance),
-                    "decision_type": d.decision_type
-                })
-
-            return {
-                "success": True,
-                "data": timeline_data,
-                "count": len(timeline_data),
-                "metadata": {
-                    "total_records": len(valid_decisions),
-                    "sampled_records": len(timeline_data),
-                    "sample_interval_minutes": 0,  # 未采样
-                    "note": "数据点数量较少，返回全部数据"
-                }
-            }
-
-        # 智能采样：按时间间隔采样
+        # 返回所有数据
         timeline_data = []
-        last_sampled_time = None
-        sample_delta = timedelta(minutes=sample_interval)
-
-        # 第一个数据点必须保留（会话开始）
-        first_decision = valid_decisions[0]
-        timeline_data.append({
-            "timestamp": first_decision.created_at.isoformat(),
-            "account_balance": float(first_decision.account_balance),
-            "unrealized_pnl": float(first_decision.unrealized_pnl) if first_decision.unrealized_pnl is not None else 0,
-            "total_asset": float(first_decision.total_asset) if first_decision.total_asset is not None else float(first_decision.account_balance),
-            "decision_type": first_decision.decision_type
-        })
-        last_sampled_time = first_decision.created_at
-
-        # 中间数据按间隔采样
-        for d in valid_decisions[1:-1]:
-            if d.created_at - last_sampled_time >= sample_delta:
-                timeline_data.append({
-                    "timestamp": d.created_at.isoformat(),
-                    "account_balance": float(d.account_balance),
-                    "unrealized_pnl": float(d.unrealized_pnl) if d.unrealized_pnl is not None else 0,
-                    "total_asset": float(d.total_asset) if d.total_asset is not None else float(d.account_balance),
-                    "decision_type": d.decision_type
-                })
-                last_sampled_time = d.created_at
-
-                # 如果采样后仍然超过max_points，停止采样
-                if len(timeline_data) >= max_points - 1:  # 保留一个位置给最后一个点
-                    break
-
-        # 最后一个数据点必须保留（当前最新状态）
-        if len(valid_decisions) > 1:
-            last_decision = valid_decisions[-1]
+        for d in valid_decisions:
             timeline_data.append({
-                "timestamp": last_decision.created_at.isoformat(),
-                "account_balance": float(last_decision.account_balance),
-                "unrealized_pnl": float(last_decision.unrealized_pnl) if last_decision.unrealized_pnl is not None else 0,
-                "total_asset": float(last_decision.total_asset) if last_decision.total_asset is not None else float(last_decision.account_balance),
-                "decision_type": last_decision.decision_type
+                "timestamp": d.created_at.isoformat(),
+                "account_balance": float(d.account_balance),
+                "unrealized_pnl": float(d.unrealized_pnl) if d.unrealized_pnl is not None else 0,
+                "total_asset": float(d.total_asset) if d.total_asset is not None else float(d.account_balance),
+                "decision_type": d.decision_type
             })
 
         return {
@@ -421,10 +389,7 @@ async def get_asset_timeline(
             "data": timeline_data,
             "count": len(timeline_data),
             "metadata": {
-                "total_records": len(valid_decisions),
-                "sampled_records": len(timeline_data),
-                "sample_interval_minutes": sample_interval,
-                "note": f"从{len(valid_decisions)}条记录中采样{len(timeline_data)}个数据点"
+                "total_records": len(valid_decisions)
             }
         }
     except Exception as e:

@@ -25,6 +25,28 @@ const apiClient = axios.create({
   timeout: API_TIMEOUT,
 });
 
+// 响应拦截器 - 统一处理错误
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // 提取后端返回的错误信息
+    if (error.response?.data?.detail) {
+      // FastAPI 返回的错误格式
+      const errorMessage = error.response.data.detail;
+      error.message = errorMessage;
+    } else if (error.response?.data?.message) {
+      // 自定义错误格式
+      error.message = error.response.data.message;
+    } else if (error.message) {
+      // 使用原始错误信息
+      error.message = error.message;
+    } else {
+      error.message = '网络请求失败';
+    }
+    return Promise.reject(error);
+  }
+);
+
 /**
  * Agent API
  * 交易代理控制 API
@@ -115,19 +137,10 @@ export const sessionApi = {
   },
 
   /**
-   * 获取会话的资产变化时序数据（优化版，支持采样）
+   * 获取会话的资产变化时序数据（全量版）
    */
-  getAssetTimeline: async (
-    sessionId: number,
-    sampleInterval?: number,
-    maxPoints?: number
-  ): Promise<any> => {
-    const response = await apiClient.get(`${API_V1}/session/${sessionId}/asset-timeline`, {
-      params: {
-        sample_interval: sampleInterval,
-        max_points: maxPoints,
-      }
-    });
+  getAssetTimeline: async (sessionId: number): Promise<any> => {
+    const response = await apiClient.get(`${API_V1}/session/${sessionId}/asset-timeline`);
     return response.data;
   },
 };

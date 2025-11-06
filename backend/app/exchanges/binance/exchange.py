@@ -220,6 +220,11 @@ class BinanceExchange(AbstractExchange):
                 'totalUnrealizedProfit': float(account_info.get('totalUnrealizedProfit', 0)),
                 'totalMarginBalance': float(account_info.get('totalMarginBalance', 0)),
                 'maxWithdrawAmount': float(account_info.get('maxWithdrawAmount', 0)),
+                # 保证金相关
+                'totalInitialMargin': float(account_info.get('totalInitialMargin', 0)),
+                'totalMaintMargin': float(account_info.get('totalMaintMargin', 0)),
+                'totalPositionInitialMargin': float(account_info.get('totalPositionInitialMargin', 0)),
+                'totalOpenOrderInitialMargin': float(account_info.get('totalOpenOrderInitialMargin', 0)),
                 'canTrade': account_info.get('canTrade', False),
                 'canDeposit': account_info.get('canDeposit', False),
                 'canWithdraw': account_info.get('canWithdraw', False),

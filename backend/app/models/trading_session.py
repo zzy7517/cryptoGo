@@ -5,7 +5,7 @@
 更新时间: 2025-10-31 - 去掉 Agent 概念，统一为 Session
 更新时间: 2025-11-04 - 改用 SQLite，移除 PostgreSQL 特定类型
 """
-from sqlalchemy import Column, BigInteger, String, Numeric, Integer, Boolean, Text, DateTime, Index, CheckConstraint
+from sqlalchemy import Column, Integer, String, Numeric, Boolean, Text, DateTime, Index, CheckConstraint
 from sqlalchemy.sql import func
 
 from ..utils.database import Base
@@ -17,7 +17,7 @@ class TradingSession(Base):
     __tablename__ = "trading_sessions"
     
     # 主键
-    id = Column(BigInteger, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     ended_at = Column(DateTime(timezone=True), comment="会话结束时间")
     

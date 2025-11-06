@@ -4,7 +4,7 @@
 创建时间: 2025-10-27
 更新时间: 2025-11-04 - 改用 SQLite，移除 PostgreSQL 特定类型
 """
-from sqlalchemy import Column, BigInteger, String, Numeric, Integer, DateTime, Index, CheckConstraint, ForeignKey
+from sqlalchemy import Column, Integer, String, Numeric, DateTime, Index, CheckConstraint, ForeignKey
 from sqlalchemy.sql import func
 
 from ..utils.database import Base
@@ -16,11 +16,11 @@ class Trade(Base):
     __tablename__ = "trades"
     
     # 主键
-    id = Column(BigInteger, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    
+
     # 关联会话
-    session_id = Column(BigInteger, ForeignKey('trading_sessions.id', ondelete='CASCADE'), comment="所属交易会话ID")
+    session_id = Column(Integer, ForeignKey('trading_sessions.id', ondelete='CASCADE'), comment="所属交易会话ID")
     
     # 交易信息
     symbol = Column(String(20), nullable=False, comment="交易对符号")
@@ -56,7 +56,7 @@ class Trade(Base):
     pnl_pct = Column(Numeric(10, 4), comment="盈亏百分比")
 
     # 关联
-    ai_decision_id = Column(BigInteger, comment="关联的AI决策ID")
+    ai_decision_id = Column(Integer, comment="关联的AI决策ID")
     entry_order_id = Column(String(100), comment="开仓订单ID（从交易所获取）")
     exit_order_id = Column(String(100), comment="平仓订单ID")
     exchange_order_id = Column(String(100), comment="交易所订单ID（向后兼容）")

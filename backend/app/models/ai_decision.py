@@ -4,7 +4,7 @@ AI 决策模型
 创建时间: 2025-10-27
 更新时间: 2025-11-04 - 改用 SQLite，移除 PostgreSQL 特定类型
 """
-from sqlalchemy import Column, BigInteger, String, Numeric, Boolean, Text, DateTime, Index, CheckConstraint, ForeignKey
+from sqlalchemy import Column, Integer, String, Numeric, Boolean, Text, DateTime, Index, CheckConstraint, ForeignKey
 from sqlalchemy.sql import func
 
 from ..utils.database import Base
@@ -16,11 +16,11 @@ class AIDecision(Base):
     __tablename__ = "ai_decisions"
     
     # 主键
-    id = Column(BigInteger, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    
+
     # 关联会话
-    session_id = Column(BigInteger, ForeignKey('trading_sessions.id', ondelete='CASCADE'), comment="所属交易会话ID")
+    session_id = Column(Integer, ForeignKey('trading_sessions.id', ondelete='CASCADE'), comment="所属交易会话ID")
     
     # 决策信息
     symbols = Column(Text, comment="分析的币种列表（JSON数组格式）")

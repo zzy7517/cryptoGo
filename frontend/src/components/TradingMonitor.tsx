@@ -28,10 +28,11 @@ export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
   });
 
   // 获取账户信息
-  const { data: accountData } = useQuery({
+  const { data: accountData, error: accountError, isLoading: accountLoading } = useQuery({
     queryKey: ['accountSummary'],
     queryFn: () => accountApi.getAccountSummary(),
     refetchInterval: 15000, // 每15秒刷新
+    retry: 2, // 重试2次
   });
 
   // 获取 Agent 状态
@@ -164,61 +165,95 @@ export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
           </div>
         )}
 
-        {/* 账户总览 - 参考 Alpha Arena 风格 */}
-        <div className="grid grid-cols-3 gap-4">
-          {/* 可用资金 */}
-          <div className="bg-white rounded-lg p-5 border border-gray-200">
-            <div className="text-sm text-gray-600 mb-2">Available Cash:</div>
-            <div className="text-3xl font-bold text-gray-900">
-              ${formatNumber(exchangeData?.account?.availableBalance || session?.final_capital || session?.initial_capital, 2)}
-            </div>
-          </div>
-
-          {/* 总盈亏 */}
-          <div className="bg-white rounded-lg p-5 border border-gray-200">
-            <div className="flex justify-between items-start mb-2">
-              <div className="text-sm text-gray-600">Total P&L:</div>
-              <div className="text-sm text-gray-600">Unrealized:</div>
-            </div>
-            <div className="flex justify-between items-center">
-              <div className={`text-3xl font-bold ${
-                ((session?.total_pnl || 0) + (exchangeData?.account?.totalUnrealizedProfit || 0)) >= 0 ? 'text-green-600' : 'text-red-600'
-              }`}>
-                {((session?.total_pnl || 0) + (exchangeData?.account?.totalUnrealizedProfit || 0)) >= 0 ? '+' : ''}${formatNumber((session?.total_pnl || 0) + (exchangeData?.account?.totalUnrealizedProfit || 0), 2)}
+        {/* 账户总览 - 优化版 */}
+        <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          {/* 账户错误提示 */}
+          {accountError && (
+            <div className="bg-red-50 border-b-2 border-red-200 px-4 py-3">
+              <div className="flex items-center gap-2 text-red-800">
+                <span className="text-lg">⚠️</span>
+                <span className="text-sm font-semibold">无法获取账户信息</span>
               </div>
-              <div className={`text-2xl font-bold ${
-                (exchangeData?.account?.totalUnrealizedProfit || 0) >= 0 ? 'text-green-600' : 'text-red-600'
-              }`}>
-                {(exchangeData?.account?.totalUnrealizedProfit || 0) >= 0 ? '+' : ''}${formatNumber(exchangeData?.account?.totalUnrealizedProfit, 2)}
+              <div className="text-xs text-red-600 mt-1">
+                {(accountError as any)?.message || '请检查交易所连接或稍后重试'}
               </div>
             </div>
-            <div className="mt-2 pt-2 border-t border-gray-100">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-600">Realized:</span>
-                <span className={`font-semibold ${
-                  (session?.total_pnl || 0) >= 0 ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {(session?.total_pnl || 0) >= 0 ? '+' : ''}${formatNumber(session?.total_pnl, 2)}
-                </span>
+          )}
+          
+          <div className="grid grid-cols-4 divide-x divide-gray-200">
+            {/* 可用资金 */}
+            <div className="p-6 hover:bg-blue-50/50 transition-colors">
+              <div className="flex items-center gap-2 mb-3">
+                <div className={`w-2 h-2 rounded-full ${accountError ? 'bg-red-500' : 'bg-blue-500'}`}></div>
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Available Cash</div>
               </div>
-            </div>
-          </div>
-
-          {/* 统计信息 */}
-          <div className="bg-white rounded-lg p-5 border border-gray-200">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="text-sm text-gray-600 mb-1">Total Fees:</div>
-                <div className="text-xl font-semibold text-gray-900">$0.00</div>
-              </div>
-              <div>
-                <div className="text-sm text-gray-600 mb-1">Return:</div>
-                <div className={`text-xl font-semibold ${
-                  (session?.total_return_pct || 0) >= 0 ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {(session?.total_return_pct || 0) >= 0 ? '+' : ''}{formatNumber(session?.total_return_pct, 2)}%
+              {accountLoading ? (
+                <div className="text-2xl text-gray-400 animate-pulse">加载中...</div>
+              ) : accountError ? (
+                <div className="text-3xl font-bold text-red-600">--</div>
+              ) : (
+                <div className="text-3xl font-bold text-gray-900">
+                  ${formatNumber(exchangeData?.account?.availableBalance, 2)}
                 </div>
+              )}
+              <div className="text-xs text-gray-500 mt-2">可用于开仓</div>
+            </div>
+
+            {/* 浮动盈亏 */}
+            <div className="p-6 hover:bg-amber-50/50 transition-colors">
+              <div className="flex items-center gap-2 mb-3">
+                <div className={`w-2 h-2 rounded-full ${
+                  accountError ? 'bg-red-500' :
+                  (exchangeData?.account?.totalUnrealizedProfit || 0) >= 0 ? 'bg-green-500' : 'bg-red-500'
+                }`}></div>
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Floating P&L</div>
               </div>
+              {accountLoading ? (
+                <div className="text-2xl text-gray-400 animate-pulse">加载中...</div>
+              ) : accountError ? (
+                <div className="text-3xl font-bold text-red-600">--</div>
+              ) : (
+                <div className={`text-3xl font-bold ${
+                  (exchangeData?.account?.totalUnrealizedProfit || 0) >= 0 ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {(exchangeData?.account?.totalUnrealizedProfit || 0) >= 0 ? '+' : ''}${formatNumber(exchangeData?.account?.totalUnrealizedProfit, 2)}
+                </div>
+              )}
+              <div className="text-xs text-gray-500 mt-2">未实现盈亏</div>
+            </div>
+
+            {/* 已实现盈亏 */}
+            <div className="p-6 hover:bg-green-50/50 transition-colors">
+              <div className="flex items-center gap-2 mb-3">
+                <div className={`w-2 h-2 rounded-full ${
+                  (session?.total_pnl || 0) >= 0 ? 'bg-green-500' : 'bg-red-500'
+                }`}></div>
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Realized P&L</div>
+              </div>
+              <div className={`text-3xl font-bold ${
+                (session?.total_pnl || 0) >= 0 ? 'text-green-600' : 'text-red-600'
+              }`}>
+                {(session?.total_pnl || 0) >= 0 ? '+' : ''}${formatNumber(session?.total_pnl, 2)}
+              </div>
+              <div className="text-xs text-gray-500 mt-2">已平仓盈亏</div>
+            </div>
+
+            {/* 保证金占用 */}
+            <div className="p-6 hover:bg-purple-50/50 transition-colors">
+              <div className="flex items-center gap-2 mb-3">
+                <div className={`w-2 h-2 rounded-full ${accountError ? 'bg-red-500' : 'bg-purple-500'}`}></div>
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Used Margin</div>
+              </div>
+              {accountLoading ? (
+                <div className="text-2xl text-gray-400 animate-pulse">加载中...</div>
+              ) : accountError ? (
+                <div className="text-3xl font-bold text-red-600">--</div>
+              ) : (
+                <div className="text-3xl font-bold text-gray-900">
+                  ${formatNumber(exchangeData?.account?.totalPositionInitialMargin || 0, 2)}
+                </div>
+              )}
+              <div className="text-xs text-gray-500 mt-2">持仓占用保证金</div>
             </div>
           </div>
         </div>
@@ -229,7 +264,7 @@ export default function TradingMonitor({ sessionId }: TradingMonitorProps) {
         </div>
 
         {/* 实时持仓 - Active Positions */}
-        {exchangeData?.positions && exchangeData.positions.length > 0 && (
+        {!accountError && exchangeData?.positions && exchangeData.positions.length > 0 && (
           <div className="bg-white rounded-lg border border-gray-200">
             <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
               <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">

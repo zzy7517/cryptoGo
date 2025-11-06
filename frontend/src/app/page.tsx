@@ -19,6 +19,8 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSessionStore } from '@/stores/sessionStore';
+import { useToast } from '@/hooks/useToast';
+import Toast from '@/components/Toast';
 
 // 交易对配置（写死在前端）
 const TRADING_PAIRS = [
@@ -30,10 +32,10 @@ const TRADING_PAIRS = [
 export default function Home() {
   const router = useRouter();
   const { activeSession, startSession, isLoading: sessionLoading, fetchActiveSession } = useSessionStore();
+  const { toast, showToast, hideToast } = useToast();
 
   const [sessionName, setSessionName] = useState('');
   const [initialCapital, setInitialCapital] = useState('5000');
-  const [autoStartAgent, setAutoStartAgent] = useState(true);
   const [decisionInterval, setDecisionInterval] = useState('60');
   const [isChecking, setIsChecking] = useState(true);
   const [selectedSymbols, setSelectedSymbols] = useState<string[]>(TRADING_PAIRS.map(pair => pair.symbol));
@@ -63,34 +65,34 @@ export default function Home() {
 
   const handleStartSession = async () => {
     try {
-      // 检查是否至少选择了一个币种（如果启用了自动启动）
-      if (autoStartAgent && selectedSymbols.length === 0) {
-        alert('请至少选择一个交易币种');
+      // 必须至少选择一个币种
+      if (selectedSymbols.length === 0) {
+        showToast('请至少选择一个交易币种', 'warning');
         return;
       }
 
-      // 一次性创建会话并启动 Agent（由后端统一处理）
+      // 一次性创建会话并启动 Agent（必定启动）
       const session = await startSession(
         sessionName || undefined,
         initialCapital ? parseFloat(initialCapital) : undefined,
         {
-          auto_start_agent: autoStartAgent,
-          symbols: autoStartAgent ? selectedSymbols : undefined,
-          decision_interval: autoStartAgent ? parseInt(decisionInterval) : undefined,
+          auto_start_agent: true,  // 强制启动Agent
+          symbols: selectedSymbols,
+          decision_interval: parseInt(decisionInterval),
         }
       );
 
       // 如果 Agent 启动失败，给出提示（但不阻止跳转）
-      if (autoStartAgent && session && !session.agent_started && session.agent_error) {
+      if (session && !session.agent_started && session.agent_error) {
         console.warn('Agent 启动失败:', session.agent_error);
-        alert(`会话创建成功，但 Agent 启动失败: ${session.agent_error}`);
+        showToast(`会话创建成功，但 Agent 启动失败: ${session.agent_error}`, 'warning');
       }
 
       // 跳转到交易页面
       router.push('/trading');
     } catch (error) {
       console.error('开始会话失败:', error);
-      alert('开始会话失败: ' + (error as any).message);
+      showToast((error as any).message || '开始会话失败', 'error');
     }
   };
 
@@ -127,8 +129,18 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-teal-900 to-cyan-900 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* 背景装饰元素 */}
+    <>
+      {/* Toast 通知 */}
+      {toast.visible && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={hideToast}
+        />
+      )}
+
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-teal-900 to-cyan-900 flex items-center justify-center p-4 relative overflow-hidden">
+        {/* 背景装饰元素 */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute top-0 -left-4 w-72 h-72 bg-teal-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
         <div className="absolute top-0 -right-4 w-72 h-72 bg-cyan-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
@@ -191,100 +203,92 @@ export default function Home() {
               </div>
             </div>
 
-            {/* 自动启动Agent */}
+            {/* Agent配置区域（必定启动，不再提供关闭选项） */}
             <div className="bg-gradient-to-br from-teal-50 to-cyan-50 border-2 border-teal-100 rounded-2xl p-6 transition-all duration-300">
               <div className="flex items-center mb-5">
-                <input
-                  type="checkbox"
-                  id="autoStartAgent"
-                  checked={autoStartAgent}
-                  onChange={(e) => setAutoStartAgent(e.target.checked)}
-                  className="w-5 h-5 text-teal-600 focus:ring-teal-500 rounded cursor-pointer"
-                />
-                <label htmlFor="autoStartAgent" className="ml-3 text-sm font-semibold text-gray-800 cursor-pointer flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <span className="text-lg">🤖</span>
-                  自动启动交易代理
-                </label>
+                  <span className="text-sm font-semibold text-gray-800">AI 交易代理配置</span>
+                  <span className="ml-2 px-2 py-0.5 bg-teal-500 text-white text-xs rounded-full">自动启动</span>
+                </div>
               </div>
 
-              {autoStartAgent && (
-                <div className="space-y-4 animate-fade-in">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                      <span className="text-base">⏱️</span>
-                      决策间隔
-                    </label>
-                    <div className="grid grid-cols-4 gap-2 mb-4">
-                      {[30, 60, 300, 600].map((seconds) => (
-                        <button
-                          key={seconds}
-                          type="button"
-                          onClick={() => setDecisionInterval(seconds.toString())}
-                          className={`px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${
-                            decisionInterval === seconds.toString()
-                              ? 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white shadow-lg shadow-teal-500/50 scale-105 ring-2 ring-teal-400'
-                              : 'bg-white text-gray-700 hover:bg-gray-100 border-2 border-gray-200 hover:border-teal-300'
-                          }`}
-                        >
-                          {seconds < 60 ? `${seconds}秒` : `${seconds / 60}分钟`}
-                        </button>
-                      ))}
-                    </div>
-                    <input
-                      type="number"
-                      value={decisionInterval}
-                      onChange={(e) => setDecisionInterval(e.target.value)}
-                      min="10"
-                      max="3600"
-                      placeholder="自定义间隔（秒）"
-                      className="w-full bg-white border-2 border-gray-200 rounded-xl px-5 py-3 text-gray-800 text-sm placeholder:text-gray-400 focus:outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100 transition-all duration-200"
-                    />
-                  </div>
-
-                  {/* 交易币种选择 */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2 justify-between">
-                      <span className="flex items-center gap-2">
-                        <span className="text-base">💹</span>
-                        交易币种
-                      </span>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <span className="text-base">⏱️</span>
+                    决策间隔
+                  </label>
+                  <div className="grid grid-cols-4 gap-2 mb-4">
+                    {[30, 60, 300, 600].map((seconds) => (
                       <button
+                        key={seconds}
                         type="button"
-                        onClick={toggleSelectAll}
-                        className="text-xs text-teal-600 hover:text-teal-700 font-semibold"
+                        onClick={() => setDecisionInterval(seconds.toString())}
+                        className={`px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${
+                          decisionInterval === seconds.toString()
+                            ? 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white shadow-lg shadow-teal-500/50 scale-105 ring-2 ring-teal-400'
+                            : 'bg-white text-gray-700 hover:bg-gray-100 border-2 border-gray-200 hover:border-teal-300'
+                        }`}
                       >
-                        {selectedSymbols.length === TRADING_PAIRS.length ? '取消全选' : '全选'}
+                        {seconds < 60 ? `${seconds}秒` : `${seconds / 60}分钟`}
                       </button>
-                    </label>
-                    <div className="bg-white rounded-xl px-4 py-3 border-2 border-gray-200">
-                      <div className="flex flex-wrap gap-2">
-                        {TRADING_PAIRS.map((pair) => {
-                          const isSelected = selectedSymbols.includes(pair.symbol);
-                          return (
-                            <button
-                              key={pair.symbol}
-                              type="button"
-                              onClick={() => toggleSymbolSelection(pair.symbol)}
-                              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                                isSelected
-                                  ? 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white shadow-md'
-                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                              }`}
-                              title={pair.description}
-                            >
-                              {isSelected && <span>✓</span>}
-                              {pair.name}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <p className="text-xs text-gray-500 mt-2">
-                        已选择 {selectedSymbols.length} 个币种 · AI 将监控并自动交易选中的币种
-                      </p>
+                    ))}
+                  </div>
+                  <input
+                    type="number"
+                    value={decisionInterval}
+                    onChange={(e) => setDecisionInterval(e.target.value)}
+                    min="10"
+                    max="3600"
+                    placeholder="自定义间隔（秒）"
+                    className="w-full bg-white border-2 border-gray-200 rounded-xl px-5 py-3 text-gray-800 text-sm placeholder:text-gray-400 focus:outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100 transition-all duration-200"
+                  />
+                </div>
+
+                {/* 交易币种选择 */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2 justify-between">
+                    <span className="flex items-center gap-2">
+                      <span className="text-base">💹</span>
+                      交易币种 <span className="text-red-500 text-xs">*必选</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={toggleSelectAll}
+                      className="text-xs text-teal-600 hover:text-teal-700 font-semibold"
+                    >
+                      {selectedSymbols.length === TRADING_PAIRS.length ? '取消全选' : '全选'}
+                    </button>
+                  </label>
+                  <div className="bg-white rounded-xl px-4 py-3 border-2 border-gray-200">
+                    <div className="flex flex-wrap gap-2">
+                      {TRADING_PAIRS.map((pair) => {
+                        const isSelected = selectedSymbols.includes(pair.symbol);
+                        return (
+                          <button
+                            key={pair.symbol}
+                            type="button"
+                            onClick={() => toggleSymbolSelection(pair.symbol)}
+                            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                              isSelected
+                                ? 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white shadow-md'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
+                            title={pair.description}
+                          >
+                            {isSelected && <span>✓</span>}
+                            {pair.name}
+                          </button>
+                        );
+                      })}
                     </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      已选择 {selectedSymbols.length} 个币种 · AI 将监控并自动交易选中的币种
+                    </p>
                   </div>
                 </div>
-              )}
+              </div>
             </div>
           </div>
 
@@ -349,6 +353,7 @@ export default function Home() {
           background-position: right;
         }
       `}</style>
-    </div>
+      </div>
+    </>
   );
 }
