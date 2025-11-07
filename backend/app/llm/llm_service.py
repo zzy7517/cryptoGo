@@ -1,6 +1,7 @@
 """
-llm service 
+LLM Service - 大语言模型服务
 创建时间: 2025-10-29
+重构时间: 2025-11-06
 """
 from openai import OpenAI
 from typing import Dict, Any, Optional, List

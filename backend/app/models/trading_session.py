@@ -48,7 +48,7 @@ class TradingSession(Base):
     decision_interval = Column(Integer, default=180, comment="决策间隔（秒）")
     trading_symbols = Column(Text, comment="交易对列表（JSON数组格式）")
     last_error = Column(Text, comment="最后的错误信息")
-    trading_params = Column(Text, comment="交易参数（JSON格式，包含 risk_params 等）")
+    trading_params = Column(Text, comment="交易参数（JSON格式，包含 risk_params, margin_mode 等）")
 
     # 配置信息
     config = Column(Text, comment="运行配置（JSON格式）")

@@ -32,6 +32,7 @@ class StartSessionRequest(BaseModel):
     )
     decision_interval: Optional[int] = Field(60, description="决策间隔（秒），默认 60 秒", ge=10, le=3600)
     risk_params: Optional[Dict[str, Any]] = Field(None, description="风险参数配置")
+    margin_mode: Optional[str] = Field("CROSSED", description="保证金模式: CROSSED(全仓) 或 ISOLATED(逐仓)")
 
 
 class EndSessionRequest(BaseModel):

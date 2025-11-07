@@ -285,7 +285,8 @@ class AbstractExchange(ABC):
         quantity: float,
         leverage: Optional[int] = None,
         stop_loss_price: Optional[float] = None,
-        take_profit_price: Optional[float] = None
+        take_profit_price: Optional[float] = None,
+        margin_mode: Optional[str] = None
     ) -> OrderResult:
         """
         开多仓的便捷方法
@@ -296,6 +297,7 @@ class AbstractExchange(ABC):
             leverage: 杠杆倍数
             stop_loss_price: 止损价格（仅供AI参考，不创建委托单）
             take_profit_price: 止盈价格（仅供AI参考，不创建委托单）
+            margin_mode: 保证金模式 (CROSSED全仓/ISOLATED逐仓)
             
         Returns:
             订单结果
@@ -305,9 +307,9 @@ class AbstractExchange(ABC):
             不会在交易所创建委托单。真正的止损止盈由AI在每个周期自主决定。
         """
         try:
-            # 设置杠杆
+            # 设置杠杆和保证金模式
             if leverage:
-                self.set_leverage(symbol, leverage)
+                self.set_leverage(symbol, leverage, margin_mode)
             
             # 开多仓（买入）- 仅使用市价单
             result = self.create_market_order(
@@ -327,6 +329,7 @@ class AbstractExchange(ABC):
                 symbol=symbol,
                 quantity=quantity,
                 leverage=leverage,
+                margin_mode=margin_mode,
                 stop_loss_reference=stop_loss_price,
                 take_profit_reference=take_profit_price
             )
@@ -343,7 +346,8 @@ class AbstractExchange(ABC):
         quantity: float,
         leverage: Optional[int] = None,
         stop_loss_price: Optional[float] = None,
-        take_profit_price: Optional[float] = None
+        take_profit_price: Optional[float] = None,
+        margin_mode: Optional[str] = None
     ) -> OrderResult:
         """
         开空仓的便捷方法
@@ -354,6 +358,7 @@ class AbstractExchange(ABC):
             leverage: 杠杆倍数
             stop_loss_price: 止损价格（仅供AI参考，不创建委托单）
             take_profit_price: 止盈价格（仅供AI参考，不创建委托单）
+            margin_mode: 保证金模式 (CROSSED全仓/ISOLATED逐仓)
             
         Returns:
             订单结果
@@ -363,9 +368,9 @@ class AbstractExchange(ABC):
             不会在交易所创建委托单。真正的止损止盈由AI在每个周期自主决定。
         """
         try:
-            # 设置杠杆
+            # 设置杠杆和保证金模式
             if leverage:
-                self.set_leverage(symbol, leverage)
+                self.set_leverage(symbol, leverage, margin_mode)
             
             # 开空仓（卖出）- 仅使用市价单
             result = self.create_market_order(
@@ -385,6 +390,7 @@ class AbstractExchange(ABC):
                 symbol=symbol,
                 quantity=quantity,
                 leverage=leverage,
+                margin_mode=margin_mode,
                 stop_loss_reference=stop_loss_price,
                 take_profit_reference=take_profit_price
             )

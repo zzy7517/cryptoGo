@@ -89,9 +89,10 @@ async def start_session(
                 # 获取后台 Agent 管理器
                 manager = get_background_agent_manager()
 
-                # 构建风险参数
+                # 构建风险参数（包含保证金模式）
                 risk_params = request.risk_params or {}
                 risk_params["decision_interval"] = request.decision_interval
+                risk_params["margin_mode"] = request.margin_mode  # 保证金模式通过 risk_params 传递
 
                 # 启动后台 Agent
                 agent_result = await manager.start_background_agent(

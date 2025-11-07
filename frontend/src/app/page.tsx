@@ -37,6 +37,7 @@ export default function Home() {
   const [sessionName, setSessionName] = useState('');
   const [initialCapital, setInitialCapital] = useState('5000');
   const [decisionInterval, setDecisionInterval] = useState('60');
+  const [marginMode, setMarginMode] = useState<'CROSSED' | 'ISOLATED'>('CROSSED');
   const [isChecking, setIsChecking] = useState(true);
   const [selectedSymbols, setSelectedSymbols] = useState<string[]>(TRADING_PAIRS.map(pair => pair.symbol));
 
@@ -79,6 +80,9 @@ export default function Home() {
           auto_start_agent: true,  // 强制启动Agent
           symbols: selectedSymbols,
           decision_interval: parseInt(decisionInterval),
+          risk_params: {
+            margin_mode: marginMode,  // 保证金模式
+          }
         }
       );
 
@@ -244,6 +248,47 @@ export default function Home() {
                     placeholder="自定义间隔（秒）"
                     className="w-full bg-white border-2 border-gray-200 rounded-xl px-5 py-3 text-gray-800 text-sm placeholder:text-gray-400 focus:outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100 transition-all duration-200"
                   />
+                </div>
+
+                {/* 保证金模式选择 */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <span className="text-base">⚖️</span>
+                    保证金模式
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setMarginMode('CROSSED')}
+                      className={`px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${
+                        marginMode === 'CROSSED'
+                          ? 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white shadow-lg shadow-teal-500/50 scale-105 ring-2 ring-teal-400'
+                          : 'bg-white text-gray-700 hover:bg-gray-100 border-2 border-gray-200 hover:border-teal-300'
+                      }`}
+                    >
+                      <div className="flex flex-col items-center gap-1">
+                        <span>全仓模式</span>
+                        <span className="text-xs opacity-80">CROSSED</span>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMarginMode('ISOLATED')}
+                      className={`px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${
+                        marginMode === 'ISOLATED'
+                          ? 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white shadow-lg shadow-teal-500/50 scale-105 ring-2 ring-teal-400'
+                          : 'bg-white text-gray-700 hover:bg-gray-100 border-2 border-gray-200 hover:border-teal-300'
+                      }`}
+                    >
+                      <div className="flex flex-col items-center gap-1">
+                        <span>逐仓模式</span>
+                        <span className="text-xs opacity-80">ISOLATED</span>
+                      </div>
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-600 mt-2">
+                    {marginMode === 'CROSSED' ? '全仓：所有持仓共享账户余额作为保证金，风险较高但资金利用率高' : '逐仓：每个持仓独立保证金，风险隔离但需要更多资金'}
+                  </p>
                 </div>
 
                 {/* 交易币种选择 */}

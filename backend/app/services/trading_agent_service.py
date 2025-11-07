@@ -14,7 +14,7 @@ import asyncio
 from pathlib import Path
 
 from ..utils.data_collector import get_exchange
-from .llm_service import get_llm
+from ..llm import get_llm
 from ..llm.prompt_builder import build_user_prompt
 from ..exchanges.factory import get_trader
 from ..exchanges.base import PositionSide as TraderPositionSide
@@ -254,7 +254,7 @@ async def get_ai_decision(
 
 # ==================== 决策执行函数 ====================
 
-async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any]:
+async def execute_decision(decision: Decision, session_id: int, margin_mode: str = 'CROSSED') -> Dict[str, Any]:
     """
     执行单个决策（使用真实交易）
     
@@ -308,7 +308,7 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
                     take_profit_price = current_price * (1 + decision.take_profit_pct / 100)
                 
                 # 执行开多仓交易
-                logger.info(f"📈 开多仓: {decision.symbol} 数量={quantity:.6f}")
+                logger.info(f"📈 开多仓: {decision.symbol} 数量={quantity:.6f}, 保证金模式={margin_mode}")
                 # 使用 asyncio.to_thread 避免阻塞事件循环
                 order_result = await asyncio.to_thread(
                     trader.open_long,
@@ -316,7 +316,8 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
                     quantity=quantity,
                     leverage=decision.leverage,
                     stop_loss_price=stop_loss_price,
-                    take_profit_price=take_profit_price
+                    take_profit_price=take_profit_price,
+                    margin_mode=margin_mode
                 )
                 
                 if not order_result.success:
@@ -367,7 +368,7 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
                     take_profit_price = current_price * (1 - decision.take_profit_pct / 100)
                 
                 # 执行开空仓交易
-                logger.info(f"📉 开空仓: {decision.symbol} 数量={quantity:.6f}")
+                logger.info(f"📉 开空仓: {decision.symbol} 数量={quantity:.6f}, 保证金模式={margin_mode}")
                 # 使用 asyncio.to_thread 避免阻塞事件循环
                 order_result = await asyncio.to_thread(
                     trader.open_short,
@@ -375,7 +376,8 @@ async def execute_decision(decision: Decision, session_id: int) -> Dict[str, Any
                     quantity=quantity,
                     leverage=decision.leverage,
                     stop_loss_price=stop_loss_price,
-                    take_profit_price=take_profit_price
+                    take_profit_price=take_profit_price,
+                    margin_mode=margin_mode
                 )
                 
                 if not order_result.success:
@@ -581,10 +583,13 @@ class TradingAgentService:
             logger.info("🔧 开始执行决策...")
             execution_results = []
             
+            # 从 risk_params 获取保证金模式
+            margin_mode = risk_params.get('margin_mode', 'CROSSED')
+            
             for i, decision in enumerate(decisions, 1):
                 logger.info(f"执行决策 [{i}/{len(decisions)}]: {decision.symbol} {decision.action}")
                 
-                result = await execute_decision(decision, self.session_id)
+                result = await execute_decision(decision, self.session_id, margin_mode)
                 execution_results.append({
                     "decision": decision.to_dict(),
                     "result": result

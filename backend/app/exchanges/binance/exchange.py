@@ -501,20 +501,35 @@ class BinanceExchange(AbstractExchange):
     
     # ==================== 杠杆和止损止盈 ====================
     
-    def set_leverage(self, symbol: str, leverage: int) -> bool:
+    def set_leverage(self, symbol: str, leverage: int, margin_mode: Optional[str] = None) -> bool:
         """
-        设置杠杆倍数
+        设置杠杆倍数和保证金模式
         
         Args:
             symbol: 交易对
             leverage: 杠杆倍数
+            margin_mode: 保证金模式 (CROSSED全仓/ISOLATED逐仓)
             
         Returns:
             是否设置成功
         """
         try:
+            # 1. 先设置保证金模式（如果指定）
+            if margin_mode:
+                try:
+                    self.client.change_margin_type(symbol, margin_mode)
+                    logger.info(f"保证金模式已设置", symbol=symbol, margin_mode=margin_mode)
+                except Exception as e:
+                    # 如果已经是该模式，API会返回错误，这是正常的
+                    error_msg = str(e)
+                    if 'No need to change margin type' in error_msg or '-4046' in error_msg:
+                        logger.debug(f"保证金模式已经是 {margin_mode}，无需修改", symbol=symbol)
+                    else:
+                        logger.warning(f"设置保证金模式失败: {e}", symbol=symbol, margin_mode=margin_mode)
+            
+            # 2. 设置杠杆
             self.client.change_leverage(symbol, leverage)
-            logger.info(f"杠杆已设置", symbol=symbol, leverage=leverage)
+            logger.info(f"杠杆已设置", symbol=symbol, leverage=leverage, margin_mode=margin_mode)
             return True
         except Exception as e:
             logger.error(f"设置杠杆失败: {e}", symbol=symbol, leverage=leverage)
