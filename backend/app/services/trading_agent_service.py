@@ -526,7 +526,7 @@ class TradingAgentService:
         risk_params: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        运行一次完整的决策周期
+        运行一次完整的决策周期（使用LangGraph框架）
         
         Args:
             symbols: 交易对列表
@@ -538,76 +538,77 @@ class TradingAgentService:
         self.call_count += 1
         
         logger.info("=" * 80)
-        logger.info(f"⏰ 决策周期 #{self.call_count} 开始")
+        logger.info(f"⏰ 决策周期 #{self.call_count} 开始 (LangGraph)")
         logger.info(f"📌 Session ID: {self.session_id}")
         logger.info(f"📌 交易对: {symbols}")
         logger.info("=" * 80)
         
         try:
-            # 1. 构建交易上下文
+            # 导入LangGraph工作流
+            from ..agents import get_trading_graph
+            
+            # 1. 构建初始状态
+            risk_params_copy = risk_params.copy()
+            risk_params_copy['symbols'] = symbols  # 添加到 risk_params 供提示词使用
+            
+            initial_state = {
+                "session_id": self.session_id,
+                "symbols": symbols,
+                "risk_params": risk_params_copy,
+                "call_count": self.call_count,
+                "start_time": self.start_time,
+                "errors": [],
+                "debug_info": {
+                    "workflow_started_at": datetime.now().isoformat()
+                }
+            }
+            
+            # 2. 获取并执行LangGraph工作流
+            logger.info("🚀 执行LangGraph工作流...")
+            trading_graph = get_trading_graph()
+            final_state = await trading_graph.ainvoke(initial_state)
+            
+            logger.info("✅ LangGraph工作流执行完成")
+            
+            # 3. 从最终状态提取结果
+            ai_response = final_state.get("ai_response", "")
+            ai_decisions = final_state.get("ai_decisions", [])
+            execution_results = final_state.get("execution_results", [])
+            user_prompt = final_state.get("user_prompt", "")
+            
+            # 4. 将决策字典转换为Decision对象（用于保存）
+            decisions = []
+            for d in ai_decisions:
+                decision = Decision(
+                    symbol=d["symbol"],
+                    action=d["action"],
+                    reasoning=d["reasoning"],
+                    leverage=d["leverage"],
+                    position_size_usd=d["position_size_usd"],
+                    stop_loss_pct=d.get("stop_loss_pct"),
+                    take_profit_pct=d.get("take_profit_pct"),
+                    stop_loss_price=d.get("stop_loss_price"),
+                    take_profit_price=d.get("take_profit_price"),
+                    confidence=d["confidence"],
+                    risk_usd=d.get("risk_usd")
+                )
+                decisions.append(decision)
+            
+            # 5. 保存决策记录到数据库
+            # 构建兼容的context对象
             context = TradingContext()
             context.current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             context.call_count = self.call_count
             context.session_id = self.session_id
             context.symbols = symbols
-            context.risk_params = risk_params
-            context.risk_params['symbols'] = symbols  # 添加到 risk_params 供提示词使用
+            context.risk_params = risk_params_copy
             
-            # 2. 调用 AI 获取决策（使用高级提示词）
-            logger.info("🤖 调用 AI 进行决策分析...")
-            ai_response, decisions, user_prompt = await get_ai_decision(
-                context, 
-                start_time=self.start_time
-            )
-            
-            logger.info(f"✅ AI 决策完成，共 {len(decisions)} 个决策")
-            
-            # 打印 AI 响应
-            logger.info("=" * 80)
-            logger.info("💭 AI 分析结果:")
-            logger.info("=" * 80)
-            logger.info(ai_response)
-            logger.info("=" * 80)
-            
-            # 打印决策列表
-            logger.info(f"📋 决策列表 ({len(decisions)} 个):")
-            for i, d in enumerate(decisions, 1):
-                logger.info(f"  [{i}] {d.symbol} - {d.action}")
-                logger.info(f"      理由: {d.reasoning}")
-                if d.action in ["open_long", "open_short"]:
-                    logger.info(f"      杠杆: {d.leverage}x, 仓位: ${d.position_size_usd:.2f}")
-                    logger.info(f"      止损: {d.stop_loss_pct}%, 止盈: {d.take_profit_pct}%")
-                    logger.info(f"      信心度: {d.confidence}%")
-            
-            # 3. 执行决策
-            logger.info("🔧 开始执行决策...")
-            execution_results = []
-            
-            # 从 risk_params 获取保证金模式
-            margin_mode = risk_params.get('margin_mode', 'CROSSED')
-            
-            for i, decision in enumerate(decisions, 1):
-                logger.info(f"执行决策 [{i}/{len(decisions)}]: {decision.symbol} {decision.action}")
-                
-                result = await execute_decision(decision, self.session_id, margin_mode)
-                execution_results.append({
-                    "decision": decision.to_dict(),
-                    "result": result
-                })
-                
-                # 短暂延迟
-                if result.get('success'):
-                    await asyncio.sleep(0.5)
-            
-            logger.info("✅ 决策执行完成")
-            
-            # 4. 保存决策记录到数据库
             await self._save_decision(
                 ai_response=ai_response,
                 decisions=decisions,
                 execution_results=execution_results,
                 context=context,
-                user_prompt=user_prompt  # 传递完整的用户prompt
+                user_prompt=user_prompt
             )
             
             logger.info("✅" * 30)
@@ -617,10 +618,11 @@ class TradingAgentService:
             return {
                 "success": True,
                 "call_count": self.call_count,
-                "decisions_count": len(decisions),
+                "decisions_count": len(ai_decisions),
                 "ai_response": ai_response,
-                "decisions": [d.to_dict() for d in decisions],
-                "execution_results": execution_results
+                "decisions": ai_decisions,
+                "execution_results": execution_results,
+                "debug_info": final_state.get("debug_info", {})
             }
             
         except Exception as e:
