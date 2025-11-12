@@ -2,8 +2,6 @@
 数据库连接管理
 使用 SQLite 数据库，提供 SQLAlchemy 引擎和会话管理
 创建时间: 2025-10-27
-更新时间: 2025-11-03 - 添加 SQLite 支持
-更新时间: 2025-11-04 - 移除 PostgreSQL 支持，仅保留 SQLite
 """
 import os
 from pathlib import Path

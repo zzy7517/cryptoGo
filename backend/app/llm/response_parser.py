@@ -15,6 +15,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field, asdict
 from decimal import Decimal
 
+from ..utils.constants import TradingAction
 from ..utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -41,7 +42,7 @@ class Decision:
     }
     """
     symbol: str
-    action: str  # open_long, open_short, close_long, close_short, hold, wait
+    action: str  # TradingAction: OPEN_LONG, OPEN_SHORT, CLOSE_LONG, CLOSE_SHORT, HOLD, WAIT
     reasoning: str = ""
 
     # 开仓时必填字段
@@ -78,12 +79,11 @@ class Decision:
         if not self.action:
             return False, "action 不能为空"
 
-        valid_actions = ["open_long", "open_short", "close_long", "close_short", "hold", "wait"]
-        if self.action not in valid_actions:
-            return False, f"action 必须是以下之一: {valid_actions}"
+        if self.action not in TradingAction.ALL_ACTIONS:
+            return False, f"action 必须是以下之一: {TradingAction.ALL_ACTIONS}"
 
         # 开仓操作的必填字段验证
-        if self.action in ["open_long", "open_short"]:
+        if self.action in TradingAction.OPEN_ACTIONS:
             if self.leverage <= 0:
                 return False, f"开仓时 leverage 必须 > 0，当前值: {self.leverage}"
 

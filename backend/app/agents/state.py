@@ -33,6 +33,9 @@ class TradingState(TypedDict, total=False):
     # 执行结果
     execution_results: List[Dict[str, Any]]  # 执行结果列表
     
+    # ========== 风险分析 ==========
+    risk_analysis: Optional[Dict[str, Any]]  # 风险分析结果
+    
     # ========== 可选的增强功能（预留）==========
     sentiment_data: Optional[Dict[str, Any]]  # 市场情绪数据（未来扩展）
     historical_insights: Optional[Dict[str, Any]]  # 历史交易分析（未来扩展）

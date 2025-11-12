@@ -2,7 +2,6 @@
 Agent 相关的 schemas
 用于 Agent 运行、决策、状态管理等
 创建时间: 2025-10-29
-更新时间: 2025-10-30（移除 LangChain，改用定时循环）
 """
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any

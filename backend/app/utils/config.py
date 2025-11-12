@@ -29,7 +29,10 @@ class Settings(BaseSettings):
     # 默认交易对（合约格式）
     DEFAULT_SYMBOL: str = "BTC/USDT:USDT"
     
-    # AI 配置 - DeepSeek
+    # AI 配置 - LLM
+    LLM_PROVIDER: str = "deepseek"  # 支持的提供商: deepseek
+    
+    # DeepSeek 配置
     DEEPSEEK_API_KEY: Optional[str] = None
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
     DEEPSEEK_MODEL: str = "deepseek-chat"

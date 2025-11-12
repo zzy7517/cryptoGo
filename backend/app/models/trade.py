@@ -2,7 +2,6 @@
 交易记录模型
 定义交易记录的数据结构，记录每笔交易的详细信息
 创建时间: 2025-10-27
-更新时间: 2025-11-04 - 改用 SQLite，移除 PostgreSQL 特定类型
 """
 from sqlalchemy import Column, Integer, String, Numeric, DateTime, Index, CheckConstraint, ForeignKey
 from sqlalchemy.sql import func

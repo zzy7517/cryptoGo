@@ -2,8 +2,6 @@
 交易会话模型
 定义交易会话的数据结构，记录每次交易运行实例的完整信息
 创建时间: 2025-10-27
-更新时间: 2025-10-31 - 去掉 Agent 概念，统一为 Session
-更新时间: 2025-11-04 - 改用 SQLite，移除 PostgreSQL 特定类型
 """
 from sqlalchemy import Column, Integer, String, Numeric, Boolean, Text, DateTime, Index, CheckConstraint
 from sqlalchemy.sql import func

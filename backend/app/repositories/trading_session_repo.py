@@ -2,7 +2,6 @@
 交易会话 Repository
 管理交易会话的数据访问层，处理会话的 CRUD 操作和状态管理
 创建时间: 2025-10-27
-更新时间: 2025-11-04 - 添加 JSON 序列化支持（SQLite 兼容）
 """
 import json
 from typing import Optional, List

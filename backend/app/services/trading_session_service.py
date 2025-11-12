@@ -2,7 +2,6 @@
 交易会话服务 - 管理交易会话的生命周期
 提供会话的创建、结束、统计、查询等完整业务逻辑
 创建时间: 2025-10-29
-更新时间: 2025-11-04 - 添加 JSON 反序列化支持（SQLite 兼容）
 """
 import json
 from typing import Optional, Dict, Any, List

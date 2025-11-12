@@ -66,7 +66,6 @@ export const agentApi = {
 /**
  * Session API
  * 会话管理 API
- * 更新时间: 2025-11-02 - 添加完整的会话管理方法
  */
 export const sessionApi = {
   /**
@@ -148,7 +147,6 @@ export const sessionApi = {
 /**
  * Account API (通用账户API，支持多交易所)
  * 创建时间: 2025-10-31
- * 更新时间: 2025-11-02
  */
 export const accountApi = {
   /**

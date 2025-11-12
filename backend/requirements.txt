@@ -2,6 +2,7 @@ fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 requests>=2.31.0
 httpx>=0.27.0
+aiohttp>=3.9.0
 pandas>=2.2.0
 pandas-ta>=0.4.67b0
 numpy>=1.26.0

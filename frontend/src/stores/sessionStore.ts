@@ -1,7 +1,6 @@
 /**
  * 交易会话状态管理
  * 创建时间: 2025-10-29
- * 更新时间: 2025-11-02 - 使用统一的 API 客户端，移除直接 fetch 调用
  */
 import { create } from 'zustand';
 import { sessionApi } from '@/lib/api';

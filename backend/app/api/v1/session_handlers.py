@@ -2,7 +2,6 @@
 交易会话处理函数
 所有会话相关的业务逻辑处理
 创建时间: 2025-10-29
-更新时间: 2025-11-04 - 添加 JSON 反序列化支持（SQLite 兼容）
 """
 import json
 from fastapi import HTTPException, Depends, Query

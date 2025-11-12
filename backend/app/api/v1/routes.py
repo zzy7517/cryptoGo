@@ -1,7 +1,6 @@
 """
 集中式路由定义
 创建时间: 2025-10-29
-更新时间: 2025-11-01（清理未使用的路由，保持精简）
 """
 from fastapi import APIRouter
 from . import session_handlers, agent_handlers, account_handlers

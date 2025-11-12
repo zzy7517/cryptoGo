@@ -8,6 +8,7 @@ from typing import Dict, Any
 from datetime import datetime
 
 from .state import TradingState
+from ..utils.constants import TradingAction
 from ..llm import get_llm
 from ..llm.prompt_builder import build_user_prompt
 from ..llm.response_parser import ResponseParser
@@ -107,7 +108,7 @@ async def trading_decision_node(state: TradingState) -> TradingState:
         for i, d in enumerate(decisions, 1):
             logger.info(f"  [{i}] {d['symbol']} - {d['action']}")
             logger.info(f"      理由: {d['reasoning']}")
-            if d['action'] in ["open_long", "open_short"]:
+            if d['action'] in TradingAction.OPEN_ACTIONS:
                 logger.info(f"      杠杆: {d['leverage']}x, 仓位: ${d['position_size_usd']:.2f}")
                 logger.info(f"      止损: {d.get('stop_loss_pct')}%, 止盈: {d.get('take_profit_pct')}%")
                 logger.info(f"      信心度: {d['confidence']}%")

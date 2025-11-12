@@ -2,7 +2,6 @@
 Trading Agent Service
 核心逻辑：数据收集 -> AI分析决策 -> 执行交易 -> 记录保存
 创建时间: 2025-10-30
-更新时间: 2025-11-04 - 添加 JSON 序列化支持（SQLite 兼容）
 """
 
 import json
@@ -13,6 +12,7 @@ import time
 import asyncio
 from pathlib import Path
 
+from ..utils.constants import TradingAction, PositionSide
 from ..utils.data_collector import get_exchange
 from ..llm import get_llm
 from ..llm.prompt_builder import build_user_prompt
@@ -73,7 +73,7 @@ class Decision:
         risk_usd: Optional[float] = None
     ):
         self.symbol = symbol
-        self.action = action  # open_long, open_short, close_long, close_short, hold, wait
+        self.action = action  # TradingAction: OPEN_LONG, OPEN_SHORT, CLOSE_LONG, CLOSE_SHORT, HOLD, WAIT
         self.reasoning = reasoning
         self.leverage = leverage
         self.position_size_usd = position_size_usd
@@ -134,6 +134,17 @@ async def build_system_prompt(risk_params: Dict[str, Any], session_id: int) -> s
     btc_eth_max = account_equity * 10
     btc_eth_leverage = risk_params.get('btc_eth_leverage', 3)
     
+    # 获取市场情绪数据
+    from .sentiment_service import get_market_sentiment
+    try:
+        sentiment = await get_market_sentiment()
+        sentiment_text = f"{sentiment['fear_greed_value']}/100 ({sentiment['fear_greed_label']}) - {sentiment['interpretation']}"
+        sentiment_suggestion = sentiment['suggestion']
+    except Exception as e:
+        logger.warning(f"⚠️ 获取情绪数据失败: {e}")
+        sentiment_text = "50/100 (Neutral) - 数据暂时不可用"
+        sentiment_suggestion = "保持正常交易策略"
+    
     # 使用字符串替换，以支持特殊字符的占位符
     prompt = template
     prompt = prompt.replace('{账户净值*0.8}', f'{altcoin_min:.0f}')
@@ -142,8 +153,11 @@ async def build_system_prompt(risk_params: Dict[str, Any], session_id: int) -> s
     prompt = prompt.replace('{账户净值*5}', f'{btc_eth_min:.0f}')
     prompt = prompt.replace('{账户净值*10}', f'{btc_eth_max:.0f}')
     prompt = prompt.replace('{BTC/ETH杠杆}', str(btc_eth_leverage))
+    prompt = prompt.replace('{fear_greed_index}', sentiment_text)
+    prompt = prompt.replace('{sentiment_suggestion}', sentiment_suggestion)
     
     logger.info(f"✅ 系统提示词加载成功，账户净值: {account_equity:.2f}")
+    logger.info(f"📊 市场情绪: {sentiment_text}")
     
     return prompt
 
@@ -276,7 +290,7 @@ async def execute_decision(decision: Decision, session_id: int, margin_mode: str
             trader = get_trader()
             
             # 根据不同的 action 执行不同的操作
-            if decision.action == "open_long":
+            if decision.action == TradingAction.OPEN_LONG:
                 # 获取当前价格用于计算数量
                 exchange = get_exchange()
                 # 使用 asyncio.to_thread 避免阻塞事件循环
@@ -336,7 +350,7 @@ async def execute_decision(decision: Decision, session_id: int, margin_mode: str
                     "quantity": float(order_result.filled_quantity or quantity)
                 }
                 
-            elif decision.action == "open_short":
+            elif decision.action == TradingAction.OPEN_SHORT:
                 # 获取当前价格用于计算数量
                 exchange = get_exchange()
                 # 使用 asyncio.to_thread 避免阻塞事件循环
@@ -396,9 +410,9 @@ async def execute_decision(decision: Decision, session_id: int, margin_mode: str
                     "quantity": float(order_result.filled_quantity or quantity)
                 }
                 
-            elif decision.action in ["close_long", "close_short"]:
+            elif decision.action in TradingAction.CLOSE_ACTIONS:
                 # 平仓：从交易所API查找对应的持仓
-                side = "long" if decision.action == "close_long" else "short"
+                side = PositionSide.LONG if decision.action == TradingAction.CLOSE_LONG else PositionSide.SHORT
 
                 # 从交易所获取实时持仓
                 exchange = get_exchange()
@@ -480,15 +494,15 @@ async def execute_decision(decision: Decision, session_id: int, margin_mode: str
                     "pnl": float(trade.pnl)
                 }
                 
-            elif decision.action == "hold":
+            elif decision.action == TradingAction.HOLD:
                 # 保持持仓不变
                 logger.info(f"⏸️ 保持持仓: {decision.symbol}")
-                return {"success": True, "action": "hold"}
+                return {"success": True, "action": TradingAction.HOLD}
                 
-            elif decision.action == "wait":
+            elif decision.action == TradingAction.WAIT:
                 # 观望，不做任何操作
                 logger.info(f"👀 观望: {decision.symbol}")
-                return {"success": True, "action": "wait"}
+                return {"success": True, "action": TradingAction.WAIT}
                 
             else:
                 logger.warning(f"⚠️ 未知的操作类型: {decision.action}")
@@ -654,10 +668,10 @@ class TradingAgentService:
                 # 判断决策类型（简化处理）
                 decision_type = "hold"
                 for d in decisions:
-                    if d.action == "open_long":
+                    if d.action == TradingAction.OPEN_LONG:
                         decision_type = "buy"
                         break
-                    elif d.action == "open_short":
+                    elif d.action == TradingAction.OPEN_SHORT:
                         decision_type = "sell"
                         break
 
